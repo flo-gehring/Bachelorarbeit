@@ -18,32 +18,12 @@ inline void createCubeMapFace(const Mat &in, Mat &face,
                               const int height = -1);
 
 
-double getPSNR ( const Mat& I1, const Mat& I2);
-Scalar getMSSIM( const Mat& I1, const Mat& I2);
 
 /*
  * See https://stackoverflow.com/questions/29678510/convert-21-equirectangular-panorama-to-cube-map
  * for how i got to this solution.
 */
 
-/*
- * Get x, y, z coords from out image pixel cords.
- * i, j are pixel coords
- * face is face number
- * edge is edge length.
- * x, y, z are coordinates in 3D Room
- */
-void outImgToXYZ(int i, int j, char face, int edge, double & x, double & y, double & z);
-
-/*
- * Convert an Equirectangular Panorama Image into an Cubemap
- */
-void convertBack(Mat imgIn, Mat imgOut);
-
-/*
- * Clips input to at least min or at most max
- */
-int clip(int in, int min, int max);
 
 int main(int argc, char *argv[])
 {
@@ -152,123 +132,7 @@ void outImgToXYZ(int i, int j, char face, int edge, double & x, double & y, doub
 
 }
 
-int clip(int in, int min, int max){
-    if (in < max &&  in > min) return in;
-    else if(in < min) return min;
-    return max;
-}
 
-void translateToPixelCoords(const Mat &, int pos, int &x, int &y){
-
-}
-
-void convertBack(Mat imgIn, Mat imgOut){
-
-    // Image Sizes
-    Size imgInSize = imgIn.size();
-    Size imgOutSize = imgOut.size();
-
-    int edge = imgInSize.width / 4;
-    char face, face2;
-
-    int iterate_from, iterate_to;
-
-    double x; // 3D coords calculated by outImgToXYZ
-    double y;
-    double z;
-
-    double theta, phi; // Radian degrees
-    double uf, vf; // approximated out pixel coordinates
-    int ui, vi; // Pixels to the bottom left
-    int u2, v2; // Pixels to the rop right
-    int mu, nu; // Fraction of way across pixels
-
-    uchar A, B, C, D; // Pixel Values
-
-    // Iterator for the image we want to have
-    MatIterator_<Vec3b> it, end;
-    int iteration_counter = 0;
-    for( it = imgOut.begin<Vec3b>(), end = imgOut.end<Vec3b>(); it != end; ++it) {
-        cout << "row: " << iteration_counter;
-        /*
-        (*it)[0] = table[(*it)[0]];
-        (*it)[1] = table[(*it)[1]];
-        (*it)[2] = table[(*it)[2]];
-         */
-    }
-
-    int nRows = imgOut.rows;
-    int nCols = imgOut.cols * imgOut.channels();
-
-    if(imgOut.isContinuous()){
-        nCols *= nRows;
-        nRows = 1;
-    }
-
-    for(int i = 0;  i < nRows; ++i){
-        face = char(i / edge); // 0 - back, 1 - left 2 - front, 3 - right
-        if(face==2){
-            iterate_from = 0;
-            iterate_to = 3 * edge;
-        }
-        else {
-            iterate_from = edge;
-            iterate_to = 2 * edge;
-        }
-
-        for (int j = iterate_from;  j  < iterate_to; ++j) {
-            if(j < edge){
-                face2 = 4;
-            }
-            else if(j >= 2 * edge){
-                face2 = 5;
-            }
-            else{
-                face2 = face;
-            } // End of if
-
-            outImgToXYZ(i, j, face2, edge, x, y, z);
-
-            theta = atan( y / x); // check if between pi and -pi
-            assert(theta <= 3.2 && theta >= -3.2);
-
-            double r = hypot(x, y);
-
-            phi = atan(z / r);
-            assert(phi >= (- PI /2) && phi <= (PI / 2));
-
-            // Source img coords
-            uf = ( 2.0*edge*(theta + PI)/PI );
-            vf = ( 2.0*edge * (PI/2 - phi)/PI);
-
-            ui = int(floor(uf));
-            vi = int(floor(vf));
-            u2 = ui + 1;
-            v2 = vi + 1;
-            mu = uf - ui;
-            nu = vf - vi;
-
-
-
-            //Pixel values of four Corners
-            A  = imgIn.at<uchar>(ui % imgInSize.height, clip(vi, 0, imgInSize.width -1));
-            /*
-            B  = imgIn.at<Vec3b>(u2 % imgInSize.width, clip(vi, 0, imgInSize.height -1));
-            C  = imgIn.at<Vec3b>(ui % imgInSize.width, clip(v2, 0, imgInSize.height -1));
-            D  = imgIn.at<Vec3b>(u2 % imgInSize.width, clip(v2, 0, imgInSize.height -1));
-             */
-            // TODO: Interpolate
-            Vec3b outPix = A;
-
-            imgOut.at<Vec3b>(i, j) = outPix; // invalid write
-
-        }
-
-    }
-
-
-
-}
 
 float faceTransform[6][2] =
         {
