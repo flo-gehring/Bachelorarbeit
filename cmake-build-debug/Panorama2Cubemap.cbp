@@ -86,18 +86,6 @@
 				</MakeCommands>
 			</Target>
 		</Build>
-		<Unit filename="/home/flo/CLionProjects/Panorama2Cubemap/VideoFrameTransform.cpp">
-			<Option target="Panorama2Cubemap"/>
-		</Unit>
-		<Unit filename="/home/flo/CLionProjects/Panorama2Cubemap/VideoFrameTransform.h">
-			<Option target="Panorama2Cubemap"/>
-		</Unit>
-		<Unit filename="/home/flo/CLionProjects/Panorama2Cubemap/VideoFrameTransformHandler.h">
-			<Option target="Panorama2Cubemap"/>
-		</Unit>
-		<Unit filename="/home/flo/CLionProjects/Panorama2Cubemap/VideoFrameTransformHelper.h">
-			<Option target="Panorama2Cubemap"/>
-		</Unit>
 		<Unit filename="/home/flo/CLionProjects/Panorama2Cubemap/main.cpp">
 			<Option target="Panorama2Cubemap"/>
 		</Unit>

@@ -1,6 +1,5 @@
 file(REMOVE_RECURSE
   "CMakeFiles/Panorama2Cubemap.dir/main.cpp.o"
-  "CMakeFiles/Panorama2Cubemap.dir/VideoFrameTransform.cpp.o"
   "Panorama2Cubemap.pdb"
   "Panorama2Cubemap"
 )

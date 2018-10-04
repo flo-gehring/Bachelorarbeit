@@ -5,6 +5,6 @@ find_package(OpenCV REQUIRED)
 
 include_directories(${OpenCV_INCLUDE_DIRS})
 
-add_executable(Panorama2Cubemap main.cpp VideoFrameTransform.cpp VideoFrameTransform.h VideoFrameTransformHandler.h VideoFrameTransformHelper.h)
+add_executable(Panorama2Cubemap main.cpp)
 
 target_link_libraries(Panorama2Cubemap -lm -lpthread ${OpenCV_LIBS})

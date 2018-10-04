@@ -6,24 +6,6 @@
 
 #IncludeRegexTransform: 
 
-/home/flo/CLionProjects/Panorama2Cubemap/VideoFrameTransform.h
-VideoFrameTransformHelper.h
-/home/flo/CLionProjects/Panorama2Cubemap/VideoFrameTransformHelper.h
-map
--
-string
--
-thread
--
-vector
--
-opencv2/opencv.hpp
--
-
-/home/flo/CLionProjects/Panorama2Cubemap/VideoFrameTransformHelper.h
-stdint.h
--
-
 /home/flo/CLionProjects/Panorama2Cubemap/main.cpp
 iostream
 -
@@ -43,8 +25,6 @@ opencv2/videoio.hpp
 -
 opencv2/highgui.hpp
 -
-VideoFrameTransform.h
-/home/flo/CLionProjects/Panorama2Cubemap/VideoFrameTransform.h
 
 /usr/local/include/opencv4/opencv2/calib3d.hpp
 opencv2/core.hpp

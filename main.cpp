@@ -8,13 +8,16 @@
 #include <opencv2/videoio.hpp>
 #include <opencv2/highgui.hpp>  // OpenCV window I/O
 
-#include "VideoFrameTransform.h"
 
 
 #define PI 3.14159
-
 using namespace std;
 using namespace cv;
+inline void createCubeMapFace(const Mat &in, Mat &face,
+                              int faceId = 0, const int width = -1,
+                              const int height = -1);
+
+
 double getPSNR ( const Mat& I1, const Mat& I2);
 Scalar getMSSIM( const Mat& I1, const Mat& I2);
 
@@ -55,68 +58,50 @@ int main(int argc, char *argv[])
     const string video_path = argv[1];
 
     int frameNum = -1;          // Frame counter
-    VideoCapture video_capture(video_path);
-    if (!video_capture.isOpened())
-    {
-        cout  << "Could not open reference " << video_path << endl;
-        return -1;
-    }
+
 
     const char* WIN_VID = "Video";
 
     // Windows
     namedWindow(WIN_VID, WINDOW_AUTOSIZE);
 
-    Size video_refrence = Size((int) video_capture.get(CAP_PROP_FRAME_WIDTH),
-                               (int) video_capture.get(CAP_PROP_FRAME_HEIGHT));
-
     // cout << video_capture.get(CAP_PROP_FORMAT);
 
-    cout << "Reference frame resolution: Width=" << video_refrence.width << "  Height=" << video_refrence.height
-         << " of nr#: " << video_capture.get(CAP_PROP_FRAME_COUNT) << endl;
-
     Mat frameReference;
-    double psnrV;
-    Scalar mssimV;
 
     Mat_<Vec3b> resized_frame(Size(2000, 1000), Vec3b(255,0,0));
 
     // Get First Frame, next at the end of the for loop.
-    video_capture >> frameReference;
-    waitKey(30);
-    CV_Assert(frameReference.depth() == CV_8U);
-    cout << "Type: " << frameReference.type() << endl;
-    cout << "Video Frame Is Continous: " << frameReference.isContinuous() << endl;
-    cout << "New Frame is Continous: " << resized_frame.isContinuous() << endl;
-    CV_Assert(frameReference.isContinuous());
-    cout << "Mat size rows" << frameReference.rows  << " \n Cols " << frameReference.cols << endl;
 
-    cout << "Frame Depth" << frameReference.depth() << endl;
-    cout << "Cannel " << frameReference.channels() << endl;
+    for (char face_id = 0; face_id < 6;  ++face_id) {
 
-
-    for(;;) //Show the image captured in the window and repeat
-    {
-
-
-        convertBack(frameReference, resized_frame);
-
-        if (frameReference.empty())
+        VideoCapture video_capture(video_path);
+        if (!video_capture.isOpened())
         {
-            cout << " < < <  Game over!  > > > ";
-            break;
+            cout  << "Could not open reference " << video_path << endl;
+            return -1;
         }
-        ++frameNum;
-        std::cout << "Transform frame " << frameNum << std::endl;
-        // vft.transformPlane(frameReference,resized_frame, 500, 500, 1,1 );
-        imshow(WIN_VID, resized_frame);
-
-        char c = (char)waitKey(30);
-        if (c == 27) break;
-
-        // Get next Frame
         video_capture >> frameReference;
+        waitKey(30);
 
+        for (;;) //Show the image captured in the window and repeat
+        {
+
+
+            if (frameReference.empty()) {
+                cout << "Face " << int(face_id) << "shown" << endl;
+                break;
+            }
+            ++frameNum;
+            createCubeMapFace(frameReference, resized_frame, face_id, 500, 500);
+            imshow(WIN_VID, resized_frame);
+            char c = (char) waitKey(20);
+            if (c == 27) break;
+
+            // Get next Frame
+            video_capture >> frameReference;
+
+        }
     }
     return 0;
 }
@@ -173,6 +158,10 @@ int clip(int in, int min, int max){
     return max;
 }
 
+void translateToPixelCoords(const Mat &, int pos, int &x, int &y){
+
+}
+
 void convertBack(Mat imgIn, Mat imgOut){
 
     // Image Sizes
@@ -197,8 +186,26 @@ void convertBack(Mat imgIn, Mat imgOut){
     uchar A, B, C, D; // Pixel Values
 
     // Iterator for the image we want to have
+    MatIterator_<Vec3b> it, end;
+    int iteration_counter = 0;
+    for( it = imgOut.begin<Vec3b>(), end = imgOut.end<Vec3b>(); it != end; ++it) {
+        cout << "row: " << iteration_counter;
+        /*
+        (*it)[0] = table[(*it)[0]];
+        (*it)[1] = table[(*it)[1]];
+        (*it)[2] = table[(*it)[2]];
+         */
+    }
 
-    for(int i = 0;  i < imgOutSize.width; ++i){
+    int nRows = imgOut.rows;
+    int nCols = imgOut.cols * imgOut.channels();
+
+    if(imgOut.isContinuous()){
+        nCols *= nRows;
+        nRows = 1;
+    }
+
+    for(int i = 0;  i < nRows; ++i){
         face = char(i / edge); // 0 - back, 1 - left 2 - front, 3 - right
         if(face==2){
             iterate_from = 0;
@@ -261,4 +268,117 @@ void convertBack(Mat imgIn, Mat imgOut){
 
 
 
+}
+
+float faceTransform[6][2] =
+        {
+                {0, 0},
+                {M_PI / 2, 0},
+                {M_PI, 0},
+                {-M_PI / 2, 0},
+                {0, -M_PI / 2},
+                {0, M_PI / 2}
+        };
+
+inline void createCubeMapFace(const Mat &in, Mat &face,
+                              int faceId, const int width,
+                              const int height) {
+
+    float inWidth = in.cols;
+    float inHeight = in.rows;
+
+    // Allocate map
+    Mat mapx(height, width, CV_32F);
+    Mat mapy(height, width, CV_32F);
+
+    // Calculate adjacent (ak) and opposite (an) of the
+    // triangle that is spanned from the sphere center
+    //to our cube face.
+    const float an = sin(M_PI / 4);
+    const float ak = cos(M_PI / 4);
+
+    const float ftu = faceTransform[faceId][0];
+    const float ftv = faceTransform[faceId][1];
+
+    // For each point in the target image,
+    // calculate the corresponding source coordinates.
+    for(int y = 0; y < height; y++) {
+        for(int x = 0; x < width; x++) {
+
+            // Map face pixel coordinates to [-1, 1] on plane
+            float nx = (float)y / (float)height - 0.5f;
+            float ny = (float)x / (float)width - 0.5f;
+
+            nx *= 2;
+            ny *= 2;
+
+            // Map [-1, 1] plane coords to [-an, an]
+            // thats the coordinates in respect to a unit sphere
+            // that contains our box.
+            nx *= an;
+            ny *= an;
+
+            float u, v;
+
+            // Project from plane to sphere surface.
+            if(ftv == 0) {
+                // Center faces
+                u = atan2(nx, ak);
+                v = atan2(ny * cos(u), ak);
+                u += ftu;
+            } else if(ftv > 0) {
+                // Bottom face
+                float d = sqrt(nx * nx + ny * ny);
+                v = M_PI / 2 - atan2(d, ak);
+                u = atan2(ny, nx);
+            } else {
+                // Top face
+                float d = sqrt(nx * nx + ny * ny);
+                v = -M_PI / 2 + atan2(d, ak);
+                u = atan2(-ny, nx);
+            }
+
+            // Map from angular coordinates to [-1, 1], respectively.
+            u = u / (M_PI);
+            v = v / (M_PI / 2);
+
+            // Warp around, if our coordinates are out of bounds.
+            while (v < -1) {
+                v += 2;
+                u += 1;
+            }
+            while (v > 1) {
+                v -= 2;
+                u += 1;
+            }
+
+            while(u < -1) {
+                u += 2;
+            }
+            while(u > 1) {
+                u -= 2;
+            }
+
+            // Map from [-1, 1] to in texture space
+            u = u / 2.0f + 0.5f;
+            v = v / 2.0f + 0.5f;
+
+            u = u * (inWidth - 1);
+            v = v * (inHeight - 1);
+
+            // Save the result for this pixel in map
+            mapx.at<float>(x, y) = u;
+            mapy.at<float>(x, y) = v;
+        }
+    }
+
+    // Recreate output image if it has wrong size or type.
+    if(face.cols != width || face.rows != height ||
+       face.type() != in.type()) {
+        face = Mat(width, height, in.type());
+    }
+
+    // Do actual resampling using OpenCV's remap
+    remap(in, face, mapx, mapy,
+          INTER_LINEAR, BORDER_CONSTANT, Scalar(0, 0, 0));
 }

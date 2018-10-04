@@ -4,7 +4,6 @@ set(CMAKE_DEPENDS_LANGUAGES
   )
 # The set of files for implicit dependencies of each language:
 set(CMAKE_DEPENDS_CHECK_CXX
-  "/home/flo/CLionProjects/Panorama2Cubemap/VideoFrameTransform.cpp" "/home/flo/CLionProjects/Panorama2Cubemap/cmake-build-debug/CMakeFiles/Panorama2Cubemap.dir/VideoFrameTransform.cpp.o"
   "/home/flo/CLionProjects/Panorama2Cubemap/main.cpp" "/home/flo/CLionProjects/Panorama2Cubemap/cmake-build-debug/CMakeFiles/Panorama2Cubemap.dir/main.cpp.o"
   )
 set(CMAKE_CXX_COMPILER_ID "GNU")

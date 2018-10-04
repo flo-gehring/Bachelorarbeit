@@ -123,33 +123,6 @@ Panorama2Cubemap/fast:
 	$(MAKE) -f CMakeFiles/Panorama2Cubemap.dir/build.make CMakeFiles/Panorama2Cubemap.dir/build
 .PHONY : Panorama2Cubemap/fast
 
-VideoFrameTransform.o: VideoFrameTransform.cpp.o
-
-.PHONY : VideoFrameTransform.o
-
-# target to build an object file
-VideoFrameTransform.cpp.o:
-	$(MAKE) -f CMakeFiles/Panorama2Cubemap.dir/build.make CMakeFiles/Panorama2Cubemap.dir/VideoFrameTransform.cpp.o
-.PHONY : VideoFrameTransform.cpp.o
-
-VideoFrameTransform.i: VideoFrameTransform.cpp.i
-
-.PHONY : VideoFrameTransform.i
-
-# target to preprocess a source file
-VideoFrameTransform.cpp.i:
-	$(MAKE) -f CMakeFiles/Panorama2Cubemap.dir/build.make CMakeFiles/Panorama2Cubemap.dir/VideoFrameTransform.cpp.i
-.PHONY : VideoFrameTransform.cpp.i
-
-VideoFrameTransform.s: VideoFrameTransform.cpp.s
-
-.PHONY : VideoFrameTransform.s
-
-# target to generate assembly for a file
-VideoFrameTransform.cpp.s:
-	$(MAKE) -f CMakeFiles/Panorama2Cubemap.dir/build.make CMakeFiles/Panorama2Cubemap.dir/VideoFrameTransform.cpp.s
-.PHONY : VideoFrameTransform.cpp.s
-
 main.o: main.cpp.o
 
 .PHONY : main.o
@@ -186,9 +159,6 @@ help:
 	@echo "... rebuild_cache"
 	@echo "... edit_cache"
 	@echo "... Panorama2Cubemap"
-	@echo "... VideoFrameTransform.o"
-	@echo "... VideoFrameTransform.i"
-	@echo "... VideoFrameTransform.s"
 	@echo "... main.o"
 	@echo "... main.i"
 	@echo "... main.s"
