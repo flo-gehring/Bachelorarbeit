@@ -3,15 +3,24 @@
 #include <iomanip>  // for controlling float print precision
 #include <sstream>  // string to number conversion
 #include <math.h>
+
+#include <opencv2/opencv.hpp>
 #include <opencv2/core.hpp>     // Basic OpenCV structures (cv::Mat, Scalar)
 #include <opencv2/imgproc.hpp>  // Gaussian Blur
 #include <opencv2/videoio.hpp>
 #include <opencv2/highgui.hpp>  // OpenCV window I/O
 
+#ifndef OPENCV
+#define OPENCV
+#endif
+
+#include "/home/flo/Workspace/darknet/include/darknet.h"
+
+#include "detect.cpp"
 
 
 #define PI 3.14159
-using namespace std;
+
 using namespace cv;
 inline void createCubeMapFace(const Mat &in, Mat &face,
                               int faceId = 0, const int width = -1,
@@ -25,17 +34,16 @@ inline void createCubeMapFace(const Mat &in, Mat &face,
 */
 
 
-int main(int argc, char *argv[])
-{
+int main(int argc, char *argv[]) {
 
-    // cout << getBuildInformation() ;
+    MatDetector matDetector;
     if (argc != 2)
     {
-        cout << "Not enough parameters" << endl;
+        std::cout << "Not enough parameters" << std::endl;
         return -1;
     }
-    stringstream conv;
-    const string video_path = argv[1];
+    std::stringstream conv;
+    const std::string video_path = argv[1];
 
     int frameNum = -1;          // Frame counter
 
@@ -48,7 +56,6 @@ int main(int argc, char *argv[])
     // cout << video_capture.get(CAP_PROP_FORMAT);
 
     Mat frameReference;
-
     Mat_<Vec3b> resized_frame(Size(2000, 1000), Vec3b(255,0,0));
 
     // Get First Frame, next at the end of the for loop.
@@ -56,24 +63,46 @@ int main(int argc, char *argv[])
     for (char face_id = 0; face_id < 6;  ++face_id) {
 
         VideoCapture video_capture(video_path);
+
+        VideoCapture *cap_ptr = &video_capture;
         if (!video_capture.isOpened())
         {
-            cout  << "Could not open reference " << video_path << endl;
+            std::cout  << "Could not open reference " << video_path << std::endl;
             return -1;
         }
         video_capture >> frameReference;
         waitKey(30);
+
 
         for (;;) //Show the image captured in the window and repeat
         {
 
 
             if (frameReference.empty()) {
-                cout << "Face " << int(face_id) << "shown" << endl;
+                std::cout << "Face " << int(face_id) << "shown" << std::endl;
                 break;
             }
             ++frameNum;
+
             createCubeMapFace(frameReference, resized_frame, face_id, 500, 500);
+
+            matDetector.detect_and_display(resized_frame);
+
+            while(! matDetector.found.empty()){
+                AbsoluteBoundingBoxes current_box = matDetector.found.top();
+
+                rectangle(resized_frame,
+                        Point2d(
+                        current_box.left,
+                        current_box.top),
+                        Point2d(
+                                current_box.right,
+                                current_box.bottom
+                                ),
+                                Scalar(0,0,255));
+                matDetector.found.pop();
+
+            }
             imshow(WIN_VID, resized_frame);
             char c = (char) waitKey(20);
             if (c == 27) break;
@@ -86,7 +115,8 @@ int main(int argc, char *argv[])
     return 0;
 }
 
-void outImgToXYZ(int i, int j, char face, int edge, double & x, double & y, double & z) {
+void outImgToXYZ(int i, int j, char face, int edge,
+        double & x, double & y, double & z) {
     double a,b;
 
     a = 2.0 * i / edge;
@@ -124,7 +154,7 @@ void outImgToXYZ(int i, int j, char face, int edge, double & x, double & y, doub
             z = -1;
             break;
         default:
-            cerr << "Error in outImgToXYZ, there are only 6 faces to a cube (0 to 5) ";
+            std::cerr << "Error in outImgToXYZ, there are only 6 faces to a cube (0 to 5) ";
             exit(-1);
 
     }
