@@ -16,6 +16,9 @@ MatDetector::MatDetector(){
     demo_total = 0;
 
 
+
+
+
     cfgfile = "/home/flo/Workspace/darknet/cfg/yolov3.cfg";
     weightfile = "/home/flo/Workspace/darknet/yolov3.weights";
     datacfg = "/home/flo/Workspace/darknet/cfg/coco.data";
@@ -28,6 +31,12 @@ MatDetector::MatDetector(){
     int classes = option_find_int(options, "classes", 20);
     char *name_list = option_find_str(options, "names", "/home/flo/Workspace/darknet/names.list");
     char **names = get_labels(name_list);
+
+
+
+    predictions = reinterpret_cast<float**>(calloc(1, sizeof(float*)));
+    predictions[0] = reinterpret_cast<float*>(calloc(size_network(net), sizeof(float)));
+    avg = reinterpret_cast<float *>(calloc(size_network(net), sizeof(float)));
 
     demo_names = names;
     demo_alphabet = alphabet;
@@ -62,8 +71,8 @@ void MatDetector::detect_and_display(cv::Mat input_mat){
     //    remember_network(net);
     detection *dets = 0;
     int nboxes = 0;
-    // dets = avg_predictions(net, &nboxes);
-    dets = get_network_boxes(net, darknet_image.w, darknet_image.h, thresh, demo_thresh, 0, 1, &nboxes);
+    dets = avg_predictions(net, &nboxes);
+    //dets = get_network_boxes(net, darknet_image.w, darknet_image.h, thresh, demo_thresh, 0, 1, &nboxes);
 
     if (nms > 0) do_nms_obj(dets, nboxes, l.classes, nms);
 
@@ -86,10 +95,10 @@ detection * MatDetector::avg_predictions(network *net, int *nboxes)
 {
     int i, j;
     int count = 0;
-    fill_cpu(demo_total, 0, avg, 1);
-    for(j = 0; j < demo_frame; ++j){
-        axpy_cpu(demo_total, 1./demo_frame, predictions[j], 1, avg, 1);
-    }
+    fill_cpu(size_network(net), 0, avg, 1);
+
+    axpy_cpu(demo_total, 1./demo_frame, predictions[0], 1, avg, 1);
+
     for(i = 0; i < net->n; ++i){
         layer l = net->layers[i];
         if(l.type == YOLO || l.type == REGION || l.type == DETECTION){
