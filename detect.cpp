@@ -41,18 +41,12 @@ MatDetector::MatDetector(){
 
 void MatDetector::detect_and_display(cv::Mat input_mat){
 
-    /* TODO: Create Letterbox image
-     *  1. Convert cv::Mat image to Ipl, then Image
-     *  2. Create Letterbox image
-    */
+
+    //Convert Mat to the "image" Format which darknet uses.
     IplImage iplimage = input_mat;
     image darknet_image = ipl_to_image(&iplimage);
     rgbgr_image(darknet_image);
     image letterbox = letterbox_image(darknet_image, net->w, net->h);
-
-    /*
-     * TODO: Detect in Generated Letterbox image
-     */
 
 
     running = 1;
@@ -78,9 +72,11 @@ void MatDetector::detect_and_display(cv::Mat input_mat){
     printf("\nFPS:%.1f\n",fps);
     printf("Objects:\n\n");
     image display = darknet_image;
-    draw_detections(display, dets, nboxes, demo_thresh, demo_names, demo_alphabet, demo_classes);
+    // draw_detections(display, dets, nboxes, demo_thresh, demo_names, demo_alphabet, demo_classes);
     print_detections(display, dets, nboxes);
     free_detections(dets, nboxes);
+    free_image(darknet_image); // Free images against memory leakage
+    free_image(letterbox);
 
 
 

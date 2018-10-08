@@ -18,9 +18,7 @@
 
 #include "detect.cpp"
 
-
-#define PI 3.14159
-
+// Can't use namespace std because of naming conflicts
 using namespace cv;
 inline void createCubeMapFace(const Mat &in, Mat &face,
                               int faceId = 0, const int width = -1,
@@ -64,7 +62,6 @@ int main(int argc, char *argv[]) {
 
         VideoCapture video_capture(video_path);
 
-        VideoCapture *cap_ptr = &video_capture;
         if (!video_capture.isOpened())
         {
             std::cout  << "Could not open reference " << video_path << std::endl;
@@ -217,7 +214,7 @@ inline void createCubeMapFace(const Mat &in, Mat &face,
             // Project from plane to sphere surface.
             if(ftv == 0) {
                 // Center faces
-                u = atan2(nx, ak);
+                u = atan2(nx, ak); //
                 v = atan2(ny * cos(u), ak);
                 u += ftu;
             } else if(ftv > 0) {
