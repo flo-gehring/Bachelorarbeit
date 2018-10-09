@@ -1,49 +1,35 @@
 #include <iostream> // for standard I/O
 #include <string>   // for strings
-#include <iomanip>  // for controlling float print precision
-#include <sstream>  // string to number conversion
-#include <math.h>
+
+
 
 #include <opencv2/opencv.hpp>
 #include <opencv2/core.hpp>     // Basic OpenCV structures (cv::Mat, Scalar)
-#include <opencv2/imgproc.hpp>  // Gaussian Blur
 #include <opencv2/videoio.hpp>
 #include <opencv2/highgui.hpp>  // OpenCV window I/O
 
-#ifndef OPENCV
-#define OPENCV
-#endif
 
-#include "/home/flo/Workspace/darknet/include/darknet.h"
+#include "cubetransform.h"
+#include "opencv_detect.h"
 
-#include "detect.cpp"
-
-// Can't use namespace std because of naming conflicts
 using namespace cv;
-inline void createCubeMapFace(const Mat &in, Mat &face,
-                              int faceId = 0, const int width = -1,
-                              const int height = -1);
-
-
-
-/*
- * See https://stackoverflow.com/questions/29678510/convert-21-equirectangular-panorama-to-cube-map
- * for how i got to this solution.
-*/
-
+using namespace dnn;
+using namespace std;
 
 int main(int argc, char *argv[]) {
+    // std::cout << getBuildInformation() << std::endl;
 
-    MatDetector matDetector;
-    if (argc != 2)
+
+    if (argc != 5)
     {
-        std::cout << "Not enough parameters" << std::endl;
+        cout << "Wrong number of parameters." << endl;
+        cout << "Usage: ./Panorama2Cube <videofile> <yolov3.cfg file> <yolov3.weight file> <coco.names file>" << std::endl;
         return -1;
     }
-    std::stringstream conv;
-    const std::string video_path = argv[1];
+    stringstream conv;
+    const string video_path = argv[1];
 
-    int frameNum = -1;          // Frame counter
+    YOLODetector yoloD(argv[2], argv[3], argv[4]);
 
 
     const char* WIN_VID = "Video";
@@ -56,53 +42,42 @@ int main(int argc, char *argv[]) {
     Mat frameReference;
     Mat_<Vec3b> resized_frame(Size(2000, 1000), Vec3b(255,0,0));
 
-    // Get First Frame, next at the end of the for loop.
 
+
+
+    // Get First Frame, next at the end of the for loop.
     for (char face_id = 0; face_id < 6;  ++face_id) {
 
         VideoCapture video_capture(video_path);
 
         if (!video_capture.isOpened())
         {
-            std::cout  << "Could not open reference " << video_path << std::endl;
+            cout  << "Could not open reference " << video_path << endl;
             return -1;
         }
         video_capture >> frameReference;
         waitKey(30);
-
 
         for (;;) //Show the image captured in the window and repeat
         {
 
 
             if (frameReference.empty()) {
-                std::cout << "Face " << int(face_id) << "shown" << std::endl;
+                cout << "Face " << int(face_id) << "shown" << endl;
                 break;
             }
-            ++frameNum;
 
-            createCubeMapFace(frameReference, resized_frame, face_id, 500, 500);
+            createCubeMapFace(frameReference, resized_frame, face_id, 416, 416);
+            yoloD.detect_and_display(resized_frame);
 
-            matDetector.detect_and_display(resized_frame);
-
-            while(! matDetector.found.empty()){
-                AbsoluteBoundingBoxes current_box = matDetector.found.top();
-
-                rectangle(resized_frame,
-                        Point2d(
-                        current_box.left,
-                        current_box.top),
-                        Point2d(
-                                current_box.right,
-                                current_box.bottom
-                                ),
-                                Scalar(0,0,255));
-                matDetector.found.pop();
-
-            }
             imshow(WIN_VID, resized_frame);
+
             char c = (char) waitKey(20);
-            if (c == 27) break;
+            if (c == 27) break; // Press Esc to skip a current cubeface
+            else if(c == 113){ // Press Q to leave Application
+                return 0;
+            }
+
 
             // Get next Frame
             video_capture >> frameReference;
@@ -112,154 +87,31 @@ int main(int argc, char *argv[]) {
     return 0;
 }
 
-void outImgToXYZ(int i, int j, char face, int edge,
-        double & x, double & y, double & z) {
-    double a,b;
-
-    a = 2.0 * i / edge;
-    b = 2.0 * j / edge;
-
-    switch (face){
-        case 0: // back
-            x = -1;
-            y = 1 - a;
-            z = 3 -b;
-            break;
-        case 1:// left
-            x = a - 3;
-            y = -1;
-            z = 3 - b;
-            break;
-        case 2: // front
-            x = 1;
-            y = a -5;
-            z = 3 -b;
-            break;
-        case 3: // right
-            x = 7 -a;
-            y = 1;
-            z = 3 -b;
-            break;
-        case 4: // top
-            x = b -1;
-            y =  a - 5;
-            z = 1;
-            break;
-        case 5: // bottom
-            x = 5 -b;
-            y = a -5;
-            z = -1;
-            break;
-        default:
-            std::cerr << "Error in outImgToXYZ, there are only 6 faces to a cube (0 to 5) ";
-            exit(-1);
-
-    }
-
-
-}
-
-
-
-float faceTransform[6][2] =
-        {
-                {0, 0},
-                {M_PI / 2, 0},
-                {M_PI, 0},
-                {-M_PI / 2, 0},
-                {0, -M_PI / 2},
-                {0, M_PI / 2}
-        };
-
 inline void createCubeMapFace(const Mat &in, Mat &face,
                               int faceId, const int width,
                               const int height) {
 
-    float inWidth = in.cols;
-    float inHeight = in.rows;
 
     // Allocate map
     Mat mapx(height, width, CV_32F);
     Mat mapy(height, width, CV_32F);
 
-    // Calculate adjacent (ak) and opposite (an) of the
-    // triangle that is spanned from the sphere center
-    //to our cube face.
-    const float an = sin(M_PI / 4);
-    const float ak = cos(M_PI / 4);
-
-    const float ftu = faceTransform[faceId][0];
-    const float ftv = faceTransform[faceId][1];
+    float u = 0;
+    float v = 0;
+    float * u_ptr = &u;
+    float * v_ptr = &v;
 
     // For each point in the target image,
     // calculate the corresponding source coordinates.
+
+
     for(int y = 0; y < height; y++) {
         for(int x = 0; x < width; x++) {
 
-            // Map face pixel coordinates to [-1, 1] on plane
-            float nx = (float)y / (float)height - 0.5f;
-            float ny = (float)x / (float)width - 0.5f;
-
-            nx *= 2;
-            ny *= 2;
-
-            // Map [-1, 1] plane coords to [-an, an]
-            // thats the coordinates in respect to a unit sphere
-            // that contains our box.
-            nx *= an;
-            ny *= an;
-
-            float u, v;
-
-            // Project from plane to sphere surface.
-            if(ftv == 0) {
-                // Center faces
-                u = atan2(nx, ak); //
-                v = atan2(ny * cos(u), ak);
-                u += ftu;
-            } else if(ftv > 0) {
-                // Bottom face
-                float d = sqrt(nx * nx + ny * ny);
-                v = M_PI / 2 - atan2(d, ak);
-                u = atan2(ny, nx);
-            } else {
-                // Top face
-                float d = sqrt(nx * nx + ny * ny);
-                v = -M_PI / 2 + atan2(d, ak);
-                u = atan2(-ny, nx);
-            }
-
-            // Map from angular coordinates to [-1, 1], respectively.
-            u = u / (M_PI);
-            v = v / (M_PI / 2);
-
-            // Warp around, if our coordinates are out of bounds.
-            while (v < -1) {
-                v += 2;
-                u += 1;
-            }
-            while (v > 1) {
-                v -= 2;
-                u += 1;
-            }
-
-            while(u < -1) {
-                u += 2;
-            }
-            while(u > 1) {
-                u -= 2;
-            }
-
-            // Map from [-1, 1] to in texture space
-            u = u / 2.0f + 0.5f;
-            v = v / 2.0f + 0.5f;
-
-            u = u * (inWidth - 1);
-            v = v * (inHeight - 1);
-
+            getPanoramaCoords(in, faceId, width,height, x,  y, u_ptr,  v_ptr);
             // Save the result for this pixel in map
-            mapx.at<float>(x, y) = u;
-            mapy.at<float>(x, y) = v;
+            mapx.at<float>(x, y) = *u_ptr;
+            mapy.at<float>(x, y) = *v_ptr;
         }
     }
 
@@ -272,4 +124,84 @@ inline void createCubeMapFace(const Mat &in, Mat &face,
     // Do actual resampling using OpenCV's remap
     remap(in, face, mapx, mapy,
           INTER_LINEAR, BORDER_CONSTANT, Scalar(0, 0, 0));
+}
+
+inline void getPanoramaCoords(const Mat & in, int faceId, const int width, const int height,
+                                     int x, int y,
+                                     float * u_ptr, float* v_ptr){
+
+    // Calculate adjacent (ak) and opposite (an) of the
+    // triangle that is spanned from the sphere center
+    //to our cube face.
+    const float an = sin(M_PI / 4);
+    const float ak = cos(M_PI / 4);
+
+    const float ftu = faceTransform[faceId][0];
+    const float ftv = faceTransform[faceId][1];
+
+    float u,v;
+
+    // Map face pixel coordinates to [-1, 1] on plane
+    float nx = (float)y / (float)height - 0.5f;
+    float ny = (float)x / (float)width - 0.5f;
+
+    nx *= 2;
+    ny *= 2;
+
+    // Map [-1, 1] plane coords to [-an, an]
+    // thats the coordinates in respect to a unit sphere
+    // that contains our box.
+    nx *= an;
+    ny *= an;
+
+
+
+    // Project from plane to sphere surface.
+    if(ftv == 0) {
+        // Center faces
+        u = atan2(nx, ak); //
+        v = atan2(ny * cos(u), ak);
+        u += ftu;
+    } else if(ftv > 0) {
+        // Bottom face
+        float d = sqrt(nx * nx + ny * ny);
+        v = M_PI / 2 - atan2(d, ak);
+        u = atan2(ny, nx);
+    } else {
+        // Top face
+        float d = sqrt(nx * nx + ny * ny);
+        v = -M_PI / 2 + atan2(d, ak);
+        u = atan2(-ny, nx);
+    }
+
+    // Map from angular coordinates to [-1, 1], respectively.
+    u = u / (M_PI);
+    v = v / (M_PI / 2);
+
+    // Warp around, if our coordinates are out of bounds.
+    while (v < -1) {
+        v += 2;
+        u += 1;
+    }
+    while (v > 1) {
+        v -= 2;
+        u += 1;
+    }
+
+    while(u < -1) {
+        u += 2;
+    }
+    while(u > 1) {
+        u -= 2;
+    }
+
+    // Map from [-1, 1] to in texture space
+    u = u / 2.0f + 0.5f;
+    v = v / 2.0f + 0.5f;
+
+    u = u * (in.cols - 1);
+    v = v * (in.rows - 1);
+
+    *u_ptr = u;
+    *v_ptr = v;
 }

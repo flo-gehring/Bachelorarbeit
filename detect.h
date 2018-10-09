@@ -28,6 +28,7 @@
 
 
 image ipl_to_image(IplImage* src); // Aus darknet sources.
+int size_network(network *net);
 
 struct AbsoluteBoundingBoxes {
     int top, left, right, bottom; // 4 Corner coordinates
@@ -84,7 +85,7 @@ double demo_time;
 void detect_and_display(cv::Mat input_mat);
 void *detect_in_thread(void *ptr);
 void remember_network(network *net);
-int size_network(network *net);
+
 detection *avg_predictions(network *net, int *nboxes);
 
 void print_detections(image im, detection *dets, int num);
