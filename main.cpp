@@ -58,7 +58,6 @@ int main(int argc, char *argv[]) {
         video_capture >> frameReference;
         waitKey(30);
 
-
         for (;;) //Show the image captured in the window and repeat
         {
 
@@ -74,7 +73,11 @@ int main(int argc, char *argv[]) {
             imshow(WIN_VID, resized_frame);
 
             char c = (char) waitKey(20);
-            if (c == 27) break;
+            if (c == 27) break; // Press Esc to skip a current cubeface
+            else if(c == 113){ // Press Q to leave Application
+                return 0;
+            }
+
 
             // Get next Frame
             video_capture >> frameReference;
@@ -95,84 +98,22 @@ inline void createCubeMapFace(const Mat &in, Mat &face,
     Mat mapx(height, width, CV_32F);
     Mat mapy(height, width, CV_32F);
 
-    // Calculate adjacent (ak) and opposite (an) of the
-    // triangle that is spanned from the sphere center
-    //to our cube face.
-    const float an = sin(M_PI / 4);
-    const float ak = cos(M_PI / 4);
-
-    const float ftu = faceTransform[faceId][0];
-    const float ftv = faceTransform[faceId][1];
+    float u = 0;
+    float v = 0;
+    float * u_ptr = &u;
+    float * v_ptr = &v;
 
     // For each point in the target image,
     // calculate the corresponding source coordinates.
+
+
     for(int y = 0; y < height; y++) {
         for(int x = 0; x < width; x++) {
 
-            // Map face pixel coordinates to [-1, 1] on plane
-            float nx = (float)y / (float)height - 0.5f;
-            float ny = (float)x / (float)width - 0.5f;
-
-            nx *= 2;
-            ny *= 2;
-
-            // Map [-1, 1] plane coords to [-an, an]
-            // thats the coordinates in respect to a unit sphere
-            // that contains our box.
-            nx *= an;
-            ny *= an;
-
-            float u, v;
-
-            // Project from plane to sphere surface.
-            if(ftv == 0) {
-                // Center faces
-                u = atan2(nx, ak); //
-                v = atan2(ny * cos(u), ak);
-                u += ftu;
-            } else if(ftv > 0) {
-                // Bottom face
-                float d = sqrt(nx * nx + ny * ny);
-                v = M_PI / 2 - atan2(d, ak);
-                u = atan2(ny, nx);
-            } else {
-                // Top face
-                float d = sqrt(nx * nx + ny * ny);
-                v = -M_PI / 2 + atan2(d, ak);
-                u = atan2(-ny, nx);
-            }
-
-            // Map from angular coordinates to [-1, 1], respectively.
-            u = u / (M_PI);
-            v = v / (M_PI / 2);
-
-            // Warp around, if our coordinates are out of bounds.
-            while (v < -1) {
-                v += 2;
-                u += 1;
-            }
-            while (v > 1) {
-                v -= 2;
-                u += 1;
-            }
-
-            while(u < -1) {
-                u += 2;
-            }
-            while(u > 1) {
-                u -= 2;
-            }
-
-            // Map from [-1, 1] to in texture space
-            u = u / 2.0f + 0.5f;
-            v = v / 2.0f + 0.5f;
-
-            u = u * (inWidth - 1);
-            v = v * (inHeight - 1);
-
+            getPanoramaCoords(in, faceId, width,height, x,  y, u_ptr,  v_ptr);
             // Save the result for this pixel in map
-            mapx.at<float>(x, y) = u;
-            mapy.at<float>(x, y) = v;
+            mapx.at<float>(x, y) = *u_ptr;
+            mapy.at<float>(x, y) = *v_ptr;
         }
     }
 
@@ -185,4 +126,84 @@ inline void createCubeMapFace(const Mat &in, Mat &face,
     // Do actual resampling using OpenCV's remap
     remap(in, face, mapx, mapy,
           INTER_LINEAR, BORDER_CONSTANT, Scalar(0, 0, 0));
+}
+
+inline void getPanoramaCoords(const Mat & in, int faceId, const int width, const int height,
+                                     int x, int y,
+                                     float * u_ptr, float* v_ptr){
+
+    // Calculate adjacent (ak) and opposite (an) of the
+    // triangle that is spanned from the sphere center
+    //to our cube face.
+    const float an = sin(M_PI / 4);
+    const float ak = cos(M_PI / 4);
+
+    const float ftu = faceTransform[faceId][0];
+    const float ftv = faceTransform[faceId][1];
+
+    float u,v;
+
+    // Map face pixel coordinates to [-1, 1] on plane
+    float nx = (float)y / (float)height - 0.5f;
+    float ny = (float)x / (float)width - 0.5f;
+
+    nx *= 2;
+    ny *= 2;
+
+    // Map [-1, 1] plane coords to [-an, an]
+    // thats the coordinates in respect to a unit sphere
+    // that contains our box.
+    nx *= an;
+    ny *= an;
+
+
+
+    // Project from plane to sphere surface.
+    if(ftv == 0) {
+        // Center faces
+        u = atan2(nx, ak); //
+        v = atan2(ny * cos(u), ak);
+        u += ftu;
+    } else if(ftv > 0) {
+        // Bottom face
+        float d = sqrt(nx * nx + ny * ny);
+        v = M_PI / 2 - atan2(d, ak);
+        u = atan2(ny, nx);
+    } else {
+        // Top face
+        float d = sqrt(nx * nx + ny * ny);
+        v = -M_PI / 2 + atan2(d, ak);
+        u = atan2(-ny, nx);
+    }
+
+    // Map from angular coordinates to [-1, 1], respectively.
+    u = u / (M_PI);
+    v = v / (M_PI / 2);
+
+    // Warp around, if our coordinates are out of bounds.
+    while (v < -1) {
+        v += 2;
+        u += 1;
+    }
+    while (v > 1) {
+        v -= 2;
+        u += 1;
+    }
+
+    while(u < -1) {
+        u += 2;
+    }
+    while(u > 1) {
+        u -= 2;
+    }
+
+    // Map from [-1, 1] to in texture space
+    u = u / 2.0f + 0.5f;
+    v = v / 2.0f + 0.5f;
+
+    u = u * (in.cols - 1);
+    v = v * (in.rows - 1);
+
+    *u_ptr = u;
+    *v_ptr = v;
 }
