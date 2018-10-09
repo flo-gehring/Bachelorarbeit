@@ -1,1 +1,4 @@
-CMakeLists.txt not found in /home/flo/CLionProjects/Panorama2Cubemap Select CMakeLists.txt file...
+/home/flo/Workspace/clion-2018.2.4/bin/cmake/linux/bin/cmake -DCMAKE_BUILD_TYPE=Debug -G "CodeBlocks - Unix Makefiles" /home/flo/CLionProjects/Panorama2Cubemap
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /home/flo/CLionProjects/Panorama2Cubemap/cmake-build-debug
