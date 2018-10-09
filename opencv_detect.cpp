@@ -5,15 +5,15 @@
 #include "opencv_detect.h"
 
 YOLODetector::YOLODetector(char *pathToConfig, char *pathToWeight, char *pathToNames) {
-    net = readNetFromDarknet("/home/flo/Workspace/darknet/cfg/yolov3.cfg",
-                                 "/home/flo/Workspace/darknet/yolov3.weights");
+    net = readNetFromDarknet(  pathToConfig, pathToWeight);
     if (net.empty())
     {
         std::cerr << "Can't load network by using the following files: " << std::endl;
+        std::cerr << pathToConfig << std::endl << pathToNames << std::endl << pathToConfig << std::endl;
         //https://pjreddie.com/darknet/yolo/" << endl;
         exit(-1);
     }
-    std::ifstream classNamesFile("/home/flo/Workspace/darknet/data/coco.names");
+    std::ifstream classNamesFile(pathToNames);
     if (classNamesFile.is_open())
     {
         std::string className = "";

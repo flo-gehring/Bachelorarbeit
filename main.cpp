@@ -12,24 +12,24 @@
 #include "cubetransform.h"
 #include "opencv_detect.h"
 
-// Can't use namespace std because of naming conflicts
 using namespace cv;
 using namespace dnn;
-
+using namespace std;
 
 int main(int argc, char *argv[]) {
     // std::cout << getBuildInformation() << std::endl;
 
 
-    if (argc != 2)
+    if (argc != 5)
     {
-        std::cout << "Not enough parameters" << std::endl;
+        cout << "Wrong number of parameters." << endl;
+        cout << "Usage: ./Panorama2Cube <videofile> <yolov3.cfg file> <yolov3.weight file> <coco.names file>" << std::endl;
         return -1;
     }
-    std::stringstream conv;
-    const std::string video_path = argv[1];
+    stringstream conv;
+    const string video_path = argv[1];
 
-    YOLODetector yoloD("dummy", "dummy", "dummy");
+    YOLODetector yoloD(argv[2], argv[3], argv[4]);
 
 
     const char* WIN_VID = "Video";
@@ -52,7 +52,7 @@ int main(int argc, char *argv[]) {
 
         if (!video_capture.isOpened())
         {
-            std::cout  << "Could not open reference " << video_path << std::endl;
+            cout  << "Could not open reference " << video_path << endl;
             return -1;
         }
         video_capture >> frameReference;
@@ -63,7 +63,7 @@ int main(int argc, char *argv[]) {
 
 
             if (frameReference.empty()) {
-                std::cout << "Face " << int(face_id) << "shown" << std::endl;
+                cout << "Face " << int(face_id) << "shown" << endl;
                 break;
             }
 
@@ -91,8 +91,6 @@ inline void createCubeMapFace(const Mat &in, Mat &face,
                               int faceId, const int width,
                               const int height) {
 
-    float inWidth = in.cols;
-    float inHeight = in.rows;
 
     // Allocate map
     Mat mapx(height, width, CV_32F);
