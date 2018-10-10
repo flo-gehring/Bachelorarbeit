@@ -23,6 +23,11 @@
 using namespace cv;
 using namespace dnn;
 
+struct prediction {
+    int left, top, right, bottom;
+    float confidence;
+    int classid;
+};
 
 class YOLODetector{
 
@@ -40,12 +45,14 @@ public:
     float nmsThreshold = 0.5;
     std::vector<String> classesVec;
 
+    std::vector<prediction> predictions; // after Detect and Display Method, the preoictions will be safed here.
+
     /*
      * Functions
      */
 
     YOLODetector(char* pathToConfig, char* pathToWeight, char* pathToNames );
-    void detect_and_display(Mat & frame);
+    void detect(Mat & frame);
 
 
 private:

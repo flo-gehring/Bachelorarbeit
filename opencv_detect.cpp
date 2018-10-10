@@ -22,7 +22,9 @@ YOLODetector::YOLODetector(char *pathToConfig, char *pathToWeight, char *pathToN
     }
 }
 
-void YOLODetector::detect_and_display(Mat & frame){
+void YOLODetector::detect(Mat & frame){
+
+    std::vector<prediction> predictions;
 
     inputBlob = blobFromImage(frame, 1 / 255.F, Size(inpWidth, inpHeight), Scalar(), true, false); //Convert Mat to batch of images
     net.setInput(inputBlob, "data");
@@ -30,13 +32,16 @@ void YOLODetector::detect_and_display(Mat & frame){
     net.forward(outs, getOutputsNames(net));
     postprocess(frame, outs, net);
 
+
+
+    /*
     // Put efficiency information.
     std::vector<double> layersTimes;
     double freq = getTickFrequency() / 1000;
     double t = net.getPerfProfile(layersTimes) / freq;
     std::string label = format("Inference time: %.2f ms", t);
     putText(frame, label, Point(0, 15), FONT_HERSHEY_SIMPLEX, 0.5, Scalar(0, 255, 0));
-
+     */
 }
 
 
@@ -62,6 +67,8 @@ void YOLODetector::drawPred(int classId, float conf, int left, int top, int righ
 
 void YOLODetector::postprocess(Mat& frame, const std::vector<Mat>& outs, Net& net)
 {
+    predictions.empty();
+
     static std::vector<int> outLayers = net.getUnconnectedOutLayers();
     static std::string outLayerType = net.getLayer(outLayers[0])->type;
 
@@ -150,13 +157,24 @@ void YOLODetector::postprocess(Mat& frame, const std::vector<Mat>& outs, Net& ne
         CV_Error(Error::StsNotImplemented, "Unknown output layer type: " + outLayerType);
 
     std::vector<int> indices;
+    // Perform Non Maximum Suppression on the bounding Boxes
     NMSBoxes(boxes, confidences, confThreshold, nmsThreshold, indices);
     for (size_t i = 0; i < indices.size(); ++i)
     {
         int idx = indices[i];
         Rect box = boxes[idx];
+
+        predictions.push_back(prediction());
+        predictions.back().classid = classIds[idx];
+        predictions.back().confidence = confidences[idx];
+        predictions.back().right = box.x + box.width;
+        predictions.back().left = box.x;
+        predictions.back().top = box.y;
+        predictions.back().bottom = box.y + box.height;
+
         drawPred(classIds[idx], confidences[idx], box.x, box.y,
                  box.x + box.width, box.y + box.height, frame);
+
     }
 }
 

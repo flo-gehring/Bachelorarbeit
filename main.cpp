@@ -16,22 +16,106 @@ using namespace cv;
 using namespace dnn;
 using namespace std;
 
+void show_on_cubefaces(YOLODetector yoloD, char * video_path);
+void save_video_projection(YOLODetector yoloDetector, char* inPath, char* outPath);
+
 int main(int argc, char *argv[]) {
     // std::cout << getBuildInformation() << std::endl;
 
 
-    if (argc != 5)
+    if (!(argc == 6 || argc == 7))
     {
         cout << "Wrong number of parameters." << endl;
-        cout << "Usage: ./Panorama2Cube <videofile> <yolov3.cfg file> <yolov3.weight file> <coco.names file>" << std::endl;
+        cout << "Usage: ./Panorama2Cube show  <yolov3.cfg file> <yolov3.weight file> <coco.names file> <videofile>" << std::endl;
+        cout << "./Panorama2Cube save <yolov3.cfg file> <yolov3.weight file> <coco.names file> <videofile> <outfile>" << std::endl;
         return -1;
     }
     stringstream conv;
-    const string video_path = argv[1];
+    char * video_path = argv[5];
 
-    YOLODetector yoloD(argv[2], argv[3], argv[4]);
+    YOLODetector yoloDetector(argv[2], argv[3], argv[4]);
+
+    if(strcmp(argv[1], "save") == 0){
+        char * outfile = argv[6];
+        save_video_projection(yoloDetector, video_path, outfile);
+    }
+    else if(strcmp(argv[1], "show") == 0){
+        show_on_cubefaces(yoloDetector, video_path);
+    }
+
+    return 0;
+}
 
 
+void save_video_projection(YOLODetector yoloDetector, char* inPath, char* outPath){
+    Mat er_projection, resized_er;
+    Mat_<Vec3b> cube_face(Size(2000, 1000), Vec3b(255,0,0));
+
+
+    // show_on_cubefaces(yoloD, argv[1]);
+
+    VideoCapture video_capture(inPath);
+    if(! video_capture.isOpened()){
+        cout  << "Could not open reference " << inPath << endl;
+        return;
+    }
+
+
+    video_capture >> er_projection;
+
+    VideoWriter vw(outPath, VideoWriter::fourcc('M', 'J', 'P', 'G'),
+                   video_capture.get(CAP_PROP_FPS),
+                   er_projection.size(), true);
+    waitKey(30);
+
+    float left, top, right, bottom = 0;
+    float * left_ptr = &left;
+    float * top_ptr = &top;
+    float * right_ptr = & right;
+    float  * bottom_ptr = & bottom;
+
+    int frame_counter = 0;
+    while(! er_projection.empty()){
+
+        for(short face_id = 0; face_id < 6; ++face_id){
+            createCubeMapFace(er_projection, cube_face, face_id, 416, 416);
+            yoloDetector.detect(cube_face);
+
+            while(! yoloDetector.predictions.empty()){
+                prediction  current_prediction = yoloDetector.predictions.back();
+
+                getPanoramaCoords(er_projection, face_id,  416, 416,
+                                  current_prediction.top,  current_prediction.left,
+                                  left_ptr, top_ptr);
+
+                getPanoramaCoords(er_projection, face_id,  416, 416,
+                                  current_prediction.bottom, current_prediction.right,
+                                  right_ptr, bottom_ptr);
+
+                rectangle(er_projection, Point(int(* left_ptr), int(* top_ptr)),
+                          Point(int(* right_ptr), int(* bottom_ptr)), Scalar(0, 0, 255));
+
+                yoloDetector.predictions.pop_back();
+
+
+            }
+
+            cout << "Face Side " << face_id << " done." << endl;
+
+
+            char c = waitKey(30);
+            if(c == 27) return;
+
+        }
+        ++ frame_counter;
+        cout << "Frame " << frame_counter <<  " of " << video_capture.get(CAP_PROP_FRAME_COUNT) << " done." << endl;
+        vw.write(er_projection);
+        video_capture >> er_projection;
+
+    }
+}
+
+void show_on_cubefaces(YOLODetector yoloD, char* video_path){
     const char* WIN_VID = "Video";
 
     // Windows
@@ -53,7 +137,7 @@ int main(int argc, char *argv[]) {
         if (!video_capture.isOpened())
         {
             cout  << "Could not open reference " << video_path << endl;
-            return -1;
+            return;
         }
         video_capture >> frameReference;
         waitKey(30);
@@ -62,20 +146,22 @@ int main(int argc, char *argv[]) {
         {
 
 
+
+
             if (frameReference.empty()) {
                 cout << "Face " << int(face_id) << "shown" << endl;
                 break;
             }
 
             createCubeMapFace(frameReference, resized_frame, face_id, 416, 416);
-            yoloD.detect_and_display(resized_frame);
+            yoloD.detect(resized_frame);
 
             imshow(WIN_VID, resized_frame);
 
             char c = (char) waitKey(20);
             if (c == 27) break; // Press Esc to skip a current cubeface
             else if(c == 113){ // Press Q to leave Application
-                return 0;
+                return;
             }
 
 
@@ -84,7 +170,6 @@ int main(int argc, char *argv[]) {
 
         }
     }
-    return 0;
 }
 
 inline void createCubeMapFace(const Mat &in, Mat &face,
