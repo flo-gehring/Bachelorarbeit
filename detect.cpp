@@ -4,6 +4,8 @@
 
 #include "detect.h"
 #include <string.h>
+#include <opencv2/dnn.hpp>
+#include <vector>
 MatDetector::MatDetector(){
 
     fps = 0;
@@ -59,7 +61,7 @@ void MatDetector::detect_and_display(cv::Mat input_mat){
 
 
     running = 1;
-    float nms = .4;
+    float nms = .95;
 
     layer l = net->layers[net->n-1];
     float *X = letterbox.data;
@@ -71,10 +73,11 @@ void MatDetector::detect_and_display(cv::Mat input_mat){
     //    remember_network(net);
     detection *dets = 0;
     int nboxes = 0;
-    dets = avg_predictions(net, &nboxes);
-    //dets = get_network_boxes(net, darknet_image.w, darknet_image.h, thresh, demo_thresh, 0, 1, &nboxes);
+    //dets = avg_predictions(net, &nboxes);
+    dets = get_network_boxes(net, darknet_image.w, darknet_image.h, thresh, demo_thresh, 0, 1, &nboxes);
 
     if (nms > 0) do_nms_obj(dets, nboxes, l.classes, nms);
+
 
     printf("\033[2J");
     printf("\033[1;1H");
@@ -128,6 +131,9 @@ int size_network(network *net)
 
 void  MatDetector::print_detections(image im, detection *dets, int num){
 
+    std::vector<cv::Rect> bboxes;
+    std::vector<float> scores;
+    std::vector<int> indices;
 
     // Gleiches vorgehen wie in draw_detections
     int i,j;
@@ -166,17 +172,29 @@ void  MatDetector::print_detections(image im, detection *dets, int num){
             printf("%s: %f \n Left/Right/Top/Bot: %i/%i/%i/%i", labelstr,
                     prob, left, right, top, bot);
 
-            found.push(AbsoluteBoundingBoxes());
-            //AbsoluteBoundingBoxes  abs = found.front();
+            bboxes.push_back(cv::Rect(cv::Point(left, top),
+                    cv::Point(right, bot)));
+            scores.push_back(prob);
 
-            found.top().bottom = bot;
-            found.top().top = top;
-            found.top().right = right;
-            found.top().left = left;
-            found.top().class_name = labelstr;
-            found.top().prob = prob;
         }
     }
+
+    /*
+     * Perform Non Maximum supression on the Bounding Boxes
+     * TODO: Replace class_name placeholder with correct Class
+     * TODO: Make nms threshold and confidence Threhsold a variable.
+     */
+    cv::dnn::NMSBoxes(bboxes, scores, .5, 0.5, indices);
+    for(auto it = indices.begin(); it != indices.end(); ++it){
+
+        found.push_back(AbsoluteBoundingBoxes());
+        //AbsoluteBoundingBoxes  abs = found.front();
+
+        found.back().rect = bboxes[*it];
+        found.back().class_name = "KONSTANT PERSON";
+        found.back().prob = scores[*it];
+    }
+
 }
 
 void MatDetector::remember_network(network *net)

@@ -17,7 +17,8 @@
 #include <opencv2/videoio.hpp>
 #include <opencv2/highgui.hpp>  // OpenCV window I/O
 #include <cv.h>
-#include <stack>
+
+#include <vector>          // std::queue
 
 // The OpenCV definition is needed to include every function in the darknet.h file.
 #ifndef OPENCV
@@ -31,7 +32,9 @@ image ipl_to_image(IplImage* src); // Aus darknet sources.
 int size_network(network *net);
 
 struct AbsoluteBoundingBoxes {
-    int top, left, right, bottom; // 2 Corner coordinates
+
+    cv::Rect rect; // Coordinates of Upper Left and Bottom Right Corner
+
     float prob; // Confidence of network
     std::string class_name;
 };
@@ -41,7 +44,7 @@ class MatDetector {
 public:
     MatDetector();
 
-std::stack<AbsoluteBoundingBoxes> found;
+std::vector<AbsoluteBoundingBoxes> found;
 char *  cfgfile;
 char * weightfile;
 char* datacfg;
