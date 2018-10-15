@@ -17,7 +17,9 @@
 #include <opencv2/videoio.hpp>
 #include <opencv2/highgui.hpp>  // OpenCV window I/O
 #include <cv.h>
+
 #include <vector>          // std::queue
+
 
 // The OpenCV definition is needed to include every function in the darknet.h file.
 #ifndef OPENCV
@@ -32,6 +34,7 @@ int size_network(network *net);
 
 struct AbsoluteBoundingBoxes {
     cv::Rect rect; // Coordinates of Upper Left and Bottom Right Corner
+
     float prob; // Confidence of network
     std::string class_name;
 };
