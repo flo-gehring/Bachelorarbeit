@@ -7,10 +7,12 @@
 #include <opencv2/core.hpp>     // Basic OpenCV structures (cv::Mat, Scalar)
 #include <opencv2/videoio.hpp>
 #include <opencv2/highgui.hpp>  // OpenCV window I/O
-
+#include <opencv2/video/tracking.hpp>
+#include <opencv2/core/ocl.hpp>
 
 #include "cubetransform.h"
 #include "opencv_detect.h"
+#include "detect.h"
 
 using namespace cv;
 using namespace dnn;
@@ -18,9 +20,11 @@ using namespace std;
 
 void show_on_cubefaces(YOLODetector yoloD, char * video_path);
 void save_video_projection(YOLODetector yoloDetector, char* inPath, char* outPath);
+void darknet_predictions(char* video_path);
 
 int main(int argc, char *argv[]) {
-    // std::cout << getBuildInformation() << std::endl;
+    std::cout << getBuildInformation() << std::endl;
+
 
 
     if (!(argc == 6 || argc == 7))
@@ -42,10 +46,70 @@ int main(int argc, char *argv[]) {
     else if(strcmp(argv[1], "show") == 0){
         show_on_cubefaces(yoloDetector, video_path);
     }
+    else if(strcmp(argv[1], "darknet") == 0){
+        darknet_predictions(video_path);
+    }
 
     return 0;
 }
 
+void darknet_predictions(char * video_path){
+
+    MatDetector matDetector;
+    VideoCapture video(video_path);
+    Mat frameReference, resizedFrame;
+    int frameNum = 0;
+
+    const char * WIN_VID = "Darknet Detection";
+    namedWindow(WIN_VID, WINDOW_AUTOSIZE);
+
+    for (char face_id = 0; face_id < 6;  ++face_id) {
+
+        VideoCapture video_capture(video_path);
+
+        if (!video_capture.isOpened())
+        {
+            std::cout  << "Could not open reference " << video_path << std::endl;
+            return;
+        }
+        video_capture >> frameReference;
+        waitKey(30);
+
+
+        for (;;) //Show the image captured in the window and repeat
+        {
+
+
+            if (frameReference.empty()) {
+                std::cout << "Face " << int(face_id) << "shown" << std::endl;
+                break;
+            }
+            ++frameNum;
+
+            createCubeMapFace(frameReference, resizedFrame, face_id, 500, 500);
+
+            matDetector.detect_and_display(resizedFrame);
+
+            while(! matDetector.found.empty()){
+                AbsoluteBoundingBoxes current_box = matDetector.found.back();
+
+                rectangle(resizedFrame,
+                          current_box.rect,
+                          Scalar(0,0,255));
+                matDetector.found.pop_back();
+
+            }
+            imshow(WIN_VID, resizedFrame);
+            char c = (char) waitKey(20);
+            if (c == 27) break;
+
+            // Get next Frame
+            video_capture >> frameReference;
+
+        }
+    }
+    return;
+}
 
 void save_video_projection(YOLODetector yoloDetector, char* inPath, char* outPath){
     Mat er_projection, resized_er;
