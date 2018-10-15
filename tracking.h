@@ -24,8 +24,11 @@ using namespace cv;
 class Tracker{
 public:
     Tracker();
-    void initialize_darknet ();
+    void initialize_darknet (Mat & frame);
     MultiTracker trackers("KCF");  // Just use KCF for now
+    void update(Mat & frame);
+    void track_video_stream(char * filename);
+
 
 
 
