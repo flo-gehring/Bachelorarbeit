@@ -8,6 +8,7 @@ include_directories("${PROJECT_BINARY_DIR}")
 link_directories(/home/flo/Workspace/darknet)
 
 
-add_executable(Panorama2Cubemap main.cpp opencv_detect.cpp cubetransform.cpp detect.cpp detect.h)
+add_executable(Panorama2Cubemap main.cpp opencv_detect.cpp
+        cubetransform.cpp detect.cpp detect.h tracking.cpp)
 
 target_link_libraries(Panorama2Cubemap -lm -lpthread -ldarknet ${OpenCV_LIBS})
