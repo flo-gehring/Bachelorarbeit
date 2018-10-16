@@ -7,7 +7,7 @@
 
 #include <string>
 #include <vector>
-#include <detect.h>
+#include "detect.h"
 
 #include <opencv2/core/utility.hpp>
 
@@ -21,20 +21,21 @@
 using namespace std;
 using namespace cv;
 
-class Tracker{
+class CustomMultiTracker{
 public:
-    Tracker();
+
     void initialize_darknet (Mat & frame);
-    MultiTracker trackers("KCF");  // Just use KCF for now
+    MultiTracker multiTracker;
     void update(Mat & frame);
-    void track_video_stream(char * filename);
+    // void track_video_stream(char * filename);
 
 
 
 
 private:
-    vector<AbsoluteBoundingBoxes> objects;
-    MatDetector darknetDetector();
+    vector<Rect2d> objects;
+    MatDetector darknetDetector;
+    std::vector<Ptr<Tracker> > algorithms;
 
 };
 
