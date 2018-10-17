@@ -15,12 +15,14 @@ using namespace cv;
 
 extern float faceTransform[6][2];
 
-extern inline void getPanoramaCoords(const Mat & in, int faceId, const int width, const int height,
+void getPanoramaCoords( Mat & in, int faceId,  int width,  int height,
                   int x, int y,
                   float * u_ptr, float* v_ptr);
 
-extern inline void createCubeMapFace(const Mat &in, Mat &face,
+void createCubeMapFace(Mat  &in, Mat &face,
                               int faceId, const int width,
                               const int height);
+
+void mapRectangleToPanorama(Mat & inFrame,  int faceId,  int width,  int height,const Rect2d & inRect, Rect2d & outRect );
 
 #endif //PANORAMA2CUBEMAP_CUBETRANSFORM_H

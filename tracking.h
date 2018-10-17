@@ -18,24 +18,27 @@
 #include <cstring>
 #include <ctime>
 
+#include "cubetransform.h"
+
 using namespace std;
 using namespace cv;
 
 class CustomMultiTracker{
 public:
-
+    CustomMultiTracker();
     void initialize_darknet (Mat & frame);
-    MultiTracker multiTracker;
+    MultiTracker multiTracker[6];
     void update(Mat & frame);
-    // void track_video_stream(char * filename);
+    int track_video_stream(char * filename);
 
 
 
 
 private:
-    vector<Rect2d> objects;
+    vector<Rect2d> objects[6];
     MatDetector darknetDetector;
-    std::vector<Ptr<Tracker> > algorithms;
+    std::vector<Ptr<Tracker>> algorithms[6]; // An Array of Vectors, one Vector for every Face side of a cube.
+
 
 };
 

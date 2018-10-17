@@ -52,6 +52,7 @@ MatDetector::MatDetector(){
 
 void MatDetector::detect_and_display(cv::Mat input_mat){
 
+    found.clear();
 
     //Convert Mat to the "image" Format which darknet uses.
     IplImage iplimage = input_mat;
