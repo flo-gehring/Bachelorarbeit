@@ -25,7 +25,7 @@ using namespace cv;
 
 class CustomMultiTracker{
 public:
-    CustomMultiTracker();
+
     void initialize_darknet (Mat & frame);
     MultiTracker multiTracker[6];
     void update(Mat & frame);

@@ -4,11 +4,7 @@
 
 #include "tracking.h"
 
-CustomMultiTracker::CustomMultiTracker(){
-    for(int i = 0; i < 6; ++i){
-        multiTracker[i] =  * (new MultiTracker());
-    }
-}
+
 
 
 
@@ -41,12 +37,33 @@ void CustomMultiTracker::update(Mat &frame) {
     Mat face;
     int side_length = 500;
 
-    Rect2d rectOnPanorama;
+    Rect2d rectOnPanorama, darknetPredRect;
 
     for (int face_id = 0; face_id < 6; ++face_id) {
 
         createCubeMapFace(frame, face, face_id, side_length, side_length);
         multiTracker[face_id].update(face);
+
+        darknetDetector.detect_and_display(face);
+
+        // Draw Boundaries of Cubefaces on Panorama
+        Rect2d cube;
+        const Rect2d asdf(0, 0, side_length, side_length);
+        mapRectangleToPanorama(frame, face_id, side_length, side_length, asdf, cube);
+        rectangle(frame, cube, Scalar(0,0,0), 2, 1);
+
+        while(! darknetDetector.found.empty()){
+            AbsoluteBoundingBoxes  current_prediction = darknetDetector.found.back();
+
+            // void mapRectangleToPanorama(Mat & inFrame,  int faceId,  int width,  int height,const Rect2d & inRect, Rect2d & outRect );
+            mapRectangleToPanorama(frame, face_id, side_length, side_length, current_prediction.rect, darknetPredRect);
+
+            rectangle(frame, darknetPredRect, Scalar(0, 0, 255));
+
+            darknetDetector.found.pop_back();
+
+
+        }
 
         for (unsigned i = 0; i < multiTracker[face_id].getObjects().size(); i++) {
             mapRectangleToPanorama(frame, face_id, side_length, side_length,
@@ -58,9 +75,7 @@ void CustomMultiTracker::update(Mat &frame) {
         }
 
     }
-    //                      left  top
-    //                      x     y   width height
-    rectangle(frame, Rect2d(100,  0, 100, 100), Scalar(0, 255, 0), 2, 1);
+
 }
 
 int CustomMultiTracker::track_video_stream(char *filename) {
