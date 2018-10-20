@@ -25,4 +25,6 @@ void createCubeMapFace(Mat  &in, Mat &face,
 
 void mapRectangleToPanorama(Mat & inFrame,  int faceId,  int width,  int height,const Rect2d & inRect, Rect2d & outRect );
 
+void cubeNet(Mat & panorama, Mat& cubemap);
+
 #endif //PANORAMA2CUBEMAP_CUBETRANSFORM_H

@@ -7,7 +7,7 @@
 #include <opencv2/core.hpp>
 #include <opencv2/videoio.hpp>
 #include <opencv2/imgproc.hpp>
-
+#include <iostream>
 #include "cubetransform.h"
 
 /* See https://stackoverflow.com/questions/29678510/convert-21-equirectangular-panorama-to-cube-map  for how i got to this solution.
@@ -178,4 +178,52 @@ void getPanoramaCoords( Mat & in, int faceId,  int width,  int height,
 
     *u_ptr = u;
     *v_ptr = v;
+}
+
+void cubeNet( Mat & panorama, Mat & cubeNet){
+
+    CV_Assert(panorama.depth() == CV_8U);
+
+
+
+    int sideLength = 500;
+    Mat face;
+
+
+    const int type = panorama.type();
+
+    Mat face_sides[6];
+    for(int s = 0; s < 6; ++s) createCubeMapFace(panorama, face_sides[s],  s, sideLength, sideLength);
+
+
+    int channels = face_sides[0].channels();
+
+    int nRows = face_sides[0].rows;
+    int nCols = face_sides[0].cols * channels;
+
+    if (face.isContinuous())
+    {
+        nCols *= nRows;
+        nRows = 1;
+    }
+    std::cout << "nRows "<<  nRows << std::endl;
+    cubeNet.create(nRows , face_sides[0].cols *6, type);
+    int i,j;
+    uchar* p_cubeNet;
+    uchar* p_face;
+
+
+    for( i = 0; i < nRows; ++i)
+    {
+        p_cubeNet = cubeNet.ptr<uchar>(i);
+        for(int s = 0; s < 6; ++s) {
+            p_face = face_sides[s].ptr<uchar>(i);
+
+            for (j = 0; j < nCols; ++j) {
+
+                p_cubeNet[j + (nCols * s)] = p_face[j];
+
+            }
+        }
+    }
 }

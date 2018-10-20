@@ -35,11 +35,50 @@ public:
 
 
 private:
-    vector<Rect2d> objects[6];
     MatDetector darknetDetector;
-    std::vector<Ptr<Tracker>> algorithms[6]; // An Array of Vectors, one Vector for every Face side of a cube.
+    int no_faces = 6;
+
 
 
 };
 
+struct TrackedObject{
+    string identifier;  //Identifier of Object
+    vector<int> frames; // The Frames in which the Object occurs
+    vector<AbsoluteBoundingBoxes> occurences; // The Occurences of the Object
+    int currentFaceId;
+    Mat histogramm;
+};
+
+class DarknetTracker{
+public:
+    void initialize(Mat & frame);
+    void update(Mat & frame);
+    int track_video_stream(char  * file);
+
+    void drawObjects(Mat & frame, int frameNum);
+
+    string baseName = "Player";
+
+private:
+
+    vector<vector<TrackedObject>> allTrackedObjects;
+
+    MatDetector darknetDetector;
+
+    unsigned int numberObjectsLastFrame;
+    unsigned int maxNumberObjects;
+
+    unsigned int sideLength = 500;
+
+    int detectObjects(Mat &frame,  vector<TrackedObject> & objects);
+
+    static Mat calcHistForRect(Mat inputImage, Rect rectangle);
+
+    /* Calculate the intersectios a single Object has with a vector of Objects
+     */
+    void getIntersections(TrackedObject trackedObject, vector<TrackedObject> & possibleIntersections,
+            vector<TrackedObject &> & intersections );
+
+};
 #endif //PANORAMA2CUBEMAP_TRACKING_H

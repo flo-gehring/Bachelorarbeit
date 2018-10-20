@@ -19,12 +19,14 @@ using namespace cv;
 using namespace dnn;
 using namespace std;
 
+
+void darknet_on_cubenet(char * video_path);
 void show_on_cubefaces(YOLODetector yoloD, char * video_path);
 void save_video_projection(YOLODetector yoloDetector, char* inPath, char* outPath);
 void darknet_predictions(char* video_path);
 
 int main(int argc, char *argv[]) {
-    std::cout << getBuildInformation() << std::endl;
+    // std::cout << getBuildInformation() << std::endl;
 
 
 
@@ -38,9 +40,7 @@ int main(int argc, char *argv[]) {
     stringstream conv;
     char * video_path = argv[5];
 
-    CustomMultiTracker customMultiTracker;
-    customMultiTracker.track_video_stream(video_path);
-
+    // darknet_on_cubenet(video_path);
 
     YOLODetector yoloDetector(argv[2], argv[3], argv[4]);
 
@@ -56,6 +56,69 @@ int main(int argc, char *argv[]) {
     }
 
     return 0;
+}
+
+
+/*
+ * Führt Detection auf dem Kompletten Video als Cubenet dargestellt aus.
+ * Funktioniert gar nicht gut.
+ */
+void darknet_on_cubenet(char * video_path){
+
+    MatDetector matDetector;
+    VideoCapture video(video_path);
+    Mat frameReference, resizedFrame;
+    int frameNum = 0;
+
+    const char * WIN_VID = "Darknet Detection";
+    namedWindow(WIN_VID, WINDOW_AUTOSIZE);
+
+
+
+        VideoCapture video_capture(video_path);
+
+        if (!video_capture.isOpened())
+        {
+            std::cout  << "Could not open reference " << video_path << std::endl;
+            return;
+        }
+        video_capture >> frameReference;
+        waitKey(30);
+
+
+        for (;;) //Show the image captured in the window and repeat
+        {
+
+
+            if (frameReference.empty()) {
+
+                break;
+            }
+
+
+           cubeNet(frameReference, resizedFrame);
+
+            matDetector.detect_and_display(resizedFrame);
+
+            while(! matDetector.found.empty()){
+                AbsoluteBoundingBoxes current_box = matDetector.found.back();
+
+                rectangle(resizedFrame,
+                          current_box.rect,
+                          Scalar(0,0,255));
+                matDetector.found.pop_back();
+
+            }
+            imshow(WIN_VID, resizedFrame);
+            char c = (char) waitKey(20);
+            if (c == 27) break;
+
+            // Get next Frame
+            video_capture >> frameReference;
+
+        }
+
+
 }
 
 void darknet_predictions(char * video_path){
