@@ -10,24 +10,28 @@
  * Custom Multi Tracker  *
  *************************/
 
+
 void CustomMultiTracker::initialize_darknet(Mat &frame) {
 
     // darknetDetector.detect_and_display(frame);
     Mat face;
     int side_length = 500;
 
-    for (int face_id = 0; face_id < no_faces; ++face_id){
+
+    for (int face_id = 0; face_id < 6; ++face_id){
         createCubeMapFace(frame, face, face_id, side_length, side_length);
         darknetDetector.detect_and_display(face);
-        face.zeros(Size(500,500), 3);
-        createCubeMapFace(frame, face, face_id, side_length, side_length);
 
        // algorithms[face_id] =  std::vector<Ptr<Tracker>>;
 
-        for(auto it = darknetDetector.found.begin(); it != darknetDetector.found.end(); ++it){
-
-            multiTracker[face_id].add(TrackerBoosting::create(), face, Rect2d((*it).rect));
+        for(auto it = darknetDetector.found.begin();
+            it != darknetDetector.found.end(); ++it){
+            algorithms[face_id].push_back(TrackerKCF::create());
+            objects[face_id].push_back((*it).rect);
         }
+
+        multiTracker[face_id].add(algorithms[face_id], frame, objects[face_id]);
+
 
     }
 
@@ -40,38 +44,18 @@ void CustomMultiTracker::update(Mat &frame) {
 
     Rect2d rectOnPanorama, darknetPredRect;
 
-    for (int face_id = 0; face_id < no_faces; ++face_id) {
+
+    for (int face_id = 0; face_id < 6; ++face_id) {
 
         createCubeMapFace(frame, face, face_id, side_length, side_length);
+        multiTracker[face_id].update(face);
 
         darknetDetector.detect_and_display(face);
 
-        createCubeMapFace(frame, face, face_id, side_length, side_length);
-
-#ifdef undef
-        for (unsigned i = 0; i < multiTracker[face_id].boundingBoxes.size(); i++) {
-            mapRectangleToPanorama(frame, face_id, side_length, side_length,
-                                   multiTracker[face_id].boundingBoxes[i],
-                                   rectOnPanorama);
-
-            rectangle(frame, rectOnPanorama, Scalar(255, 0, 0), 2, 1);
-
-        }
-        waitKey();
-#endif
-
-        bool update_success = multiTracker[face_id].update(face);
-
-        if(! update_success){
-            cerr << "Update not sucessfull!" << endl;
-            waitKey();
-        }
-
-
-
         // Draw Boundaries of Cubefaces on Panorama
         Rect2d cube;
-        const Rect2d asdf(0, 0, side_length - 5 , side_length -5);
+        const Rect2d asdf(0, 0, side_length, side_length);
+
         mapRectangleToPanorama(frame, face_id, side_length, side_length, asdf, cube);
         rectangle(frame, cube, Scalar(0,0,0), 2, 1);
 
@@ -133,6 +117,7 @@ int CustomMultiTracker::track_video_stream(char *filename) {
 
     }
     return 0;
+
 }
 
 #ifdef UNDEF

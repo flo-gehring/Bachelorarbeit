@@ -33,6 +33,7 @@ image ipl_to_image(IplImage* src); // Aus darknet sources.
 int size_network(network *net);
 
 struct AbsoluteBoundingBoxes {
+
     cv::Rect rect; // Coordinates of Upper Left and Bottom Right Corner
 
     float prob; // Confidence of network

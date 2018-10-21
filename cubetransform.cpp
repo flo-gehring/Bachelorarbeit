@@ -180,6 +180,7 @@ void getPanoramaCoords( Mat & in, int faceId,  int width,  int height,
     *v_ptr = v;
 }
 
+
 void cubeNet( Mat & panorama, Mat & cubeNet){
 
     CV_Assert(panorama.depth() == CV_8U);

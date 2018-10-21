@@ -35,14 +35,21 @@ public:
 
 
 private:
+
     MatDetector darknetDetector;
     int no_faces = 6;
+     vector<Rect2d> objects[6];
+    MatDetector darknetDetector;
+    std::vector<Ptr<Tracker>> algorithms[6]; // An Array of Vectors, one Vector for every Face side of a cube.
+
+
 
 
 
 };
 
 struct TrackedObject{
+};
     string identifier;  //Identifier of Object
     vector<int> frames; // The Frames in which the Object occurs
     vector<AbsoluteBoundingBoxes> occurences; // The Occurences of the Object
@@ -81,4 +88,5 @@ private:
             vector<TrackedObject &> & intersections );
 
 };
+
 #endif //PANORAMA2CUBEMAP_TRACKING_H

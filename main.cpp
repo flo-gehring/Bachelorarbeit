@@ -40,7 +40,7 @@ int main(int argc, char *argv[]) {
     stringstream conv;
     char * video_path = argv[5];
 
-    // darknet_on_cubenet(video_path);
+
 
     YOLODetector yoloDetector(argv[2], argv[3], argv[4]);
 
