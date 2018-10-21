@@ -23,70 +23,75 @@
 using namespace std;
 using namespace cv;
 
-class CustomMultiTracker{
-public:
 
-    void initialize_darknet (Mat & frame);
-    MultiTracker multiTracker[6];
-    void update(Mat & frame);
-    int track_video_stream(char * filename);
+class FootballPlayer {
 
-
-
-
-private:
-
-    MatDetector darknetDetector;
-    int no_faces = 6;
-     vector<Rect2d> objects[6];
-    MatDetector darknetDetector;
-    std::vector<Ptr<Tracker>> algorithms[6]; // An Array of Vectors, one Vector for every Face side of a cube.
-
-
-
-
-
-};
-
-struct TrackedObject{
-};
-    string identifier;  //Identifier of Object
-    vector<int> frames; // The Frames in which the Object occurs
-    vector<AbsoluteBoundingBoxes> occurences; // The Occurences of the Object
-    int currentFaceId;
-    Mat histogramm;
-};
-
-class DarknetTracker{
-public:
-    void initialize(Mat & frame);
-    void update(Mat & frame);
-    int track_video_stream(char  * file);
-
-    void drawObjects(Mat & frame, int frameNum);
-
-    string baseName = "Player";
-
-private:
-
-    vector<vector<TrackedObject>> allTrackedObjects;
-
-    MatDetector darknetDetector;
-
-    unsigned int numberObjectsLastFrame;
-    unsigned int maxNumberObjects;
-
-    unsigned int sideLength = 500;
-
-    int detectObjects(Mat &frame,  vector<TrackedObject> & objects);
-
-    static Mat calcHistForRect(Mat inputImage, Rect rectangle);
-
-    /* Calculate the intersectios a single Object has with a vector of Objects
+    /*
+     * Interpret as Follows: If i is an integer in "frames" at position X, then the Football Player appeared
+     * in the Video in the i-th frame on the position saved in coordinates[X].
      */
-    void getIntersections(TrackedObject trackedObject, vector<TrackedObject> & possibleIntersections,
-            vector<TrackedObject &> & intersections );
+    vector<Rect> coordinates;
+    vector<int> frames;
 
+    string identifier; // Display Name
+
+    /*
+     * The following Data will be (hopefully) usefull in identifying the Player after occlusion.
+     */
+    int x_vel, y_vel; // "Velocity in Pixels per frame"
+    Mat hist; // Histogramm of the Player
 };
 
+class Region{
+    Rect coordinates;
+    vector<FootballPlayer *> playersInRegion;
+};
+
+class RegionTracker{
+public:
+    int initialize(Mat frame);
+    bool update(Mat frame);
+
+protected:
+    /*
+     * Calculates a Matrix as described in the Paper from regionsNewFrame and regionsLastFrame.
+     */
+    void calcMatrix();
+
+    /*
+     * Applies the handle* Methods according to the calculated Matrix.
+     */
+    void interpretMatrix();
+
+    // Handles the Appearance of a completely new Region which has index regionIndex in regionsNewFrame.
+    void handleAppearance(int regionIndex);
+
+    // Handles the Dissapearance of a Region which has index regionIndex in regionsLastFrame.
+    void handleDissapearance(int regionIndex);
+
+    // Handles the Splitting of the Region regionsLastFrame[regionsIndex] into the given new regions.
+    void handleSplitting(int regionIndex, int splitInto[]);
+
+    // Handles the merging of multiple old regions into a single new region.
+    void handleMerging(int regions[], int mergeInto);
+
+    // If an old region directly corresponds to a new region, this method is applied.
+    void handleContinuation(int regionIndexOld, int regionIndexNew);
+
+
+
+    Mat matrix;
+
+
+    vector<Region> outOfSightRegions;
+
+    vector<Region> regionsNewFrame;
+    vector<Region> regionLastFrame;
+
+    vector<FootballPlayer> footballPlayers;
+
+    MatDetector darknetDetector;
+
+
+};
 #endif //PANORAMA2CUBEMAP_TRACKING_H
