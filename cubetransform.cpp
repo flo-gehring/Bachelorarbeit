@@ -66,7 +66,7 @@ void createCubeMapFace(Mat  &in, Mat &face,
           INTER_LINEAR, BORDER_CONSTANT, Scalar(0, 0, 0));
 }
 
-void mapRectangleToPanorama(Mat & inFrame,  int faceId,  int width,  int height, const Rect2d &  inRect, Rect2d & outRect ){
+void mapRectangleToPanorama(Mat & inFrame,  int faceId,  int width,  int height, const Rect2d &  inRect, Rect & outRect ){
 
     float top_adr = 0;
     float left_adr = 0;
@@ -89,7 +89,7 @@ void mapRectangleToPanorama(Mat & inFrame,  int faceId,  int width,  int height,
     getPanoramaCoords(inFrame, faceId, width, height, top, left, left_ptr,  top_ptr);
     getPanoramaCoords(inFrame, faceId, width, height, bottom, right, right_ptr,  bottom_ptr);
 
-    Rect2d r(Point(* left_ptr, *top_ptr),
+    Rect r(Point(* left_ptr, *top_ptr),
              Point( * right_ptr, * bottom_ptr));
 
 

@@ -16,7 +16,7 @@
 #include <opencv2/imgproc.hpp>  // Gaussian Blur
 #include <opencv2/videoio.hpp>
 #include <opencv2/highgui.hpp>  // OpenCV window I/O
-#include <cv.h>
+#include <opencv/cv.h>
 
 #include <vector>          // std::queue
 

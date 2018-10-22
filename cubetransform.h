@@ -23,7 +23,7 @@ void createCubeMapFace(Mat  &in, Mat &face,
                               int faceId, const int width,
                               const int height);
 
-void mapRectangleToPanorama(Mat & inFrame,  int faceId,  int width,  int height,const Rect2d & inRect, Rect2d & outRect );
+void mapRectangleToPanorama(Mat & inFrame,  int faceId,  int width,  int height,const Rect2d & inRect, Rect & outRect );
 
 
 void cubeNet(Mat & panorama, Mat& cubemap);

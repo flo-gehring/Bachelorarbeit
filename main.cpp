@@ -26,7 +26,7 @@ void save_video_projection(YOLODetector yoloDetector, char* inPath, char* outPat
 void darknet_predictions(char* video_path);
 
 int main(int argc, char *argv[]) {
-    // std::cout << getBuildInformation() << std::endl;
+    std::cout << getBuildInformation() << std::endl;
 
 
 

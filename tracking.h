@@ -11,7 +11,6 @@
 
 #include <opencv2/core/utility.hpp>
 
-#include <opencv2/tracking.hpp>
 #include <opencv2/videoio.hpp>
 #include <opencv2/highgui.hpp>
 #include <iostream>
@@ -25,6 +24,10 @@ using namespace cv;
 
 
 class FootballPlayer {
+public:
+    FootballPlayer(Rect coordinate, int frame, string identifier);
+
+private:
 
     /*
      * Interpret as Follows: If i is an integer in "frames" at position X, then the Football Player appeared
@@ -43,8 +46,14 @@ class FootballPlayer {
 };
 
 class Region{
+public:
+    Region(const Rect &coordinates,  FootballPlayer * playersInRegion);
+    Region(Rect coordinates);
+
     Rect coordinates;
     vector<FootballPlayer *> playersInRegion;
+
+    static bool regionsAssociated(const Region & r1, const Region & r2);
 };
 
 class RegionTracker{
@@ -78,6 +87,13 @@ protected:
     // If an old region directly corresponds to a new region, this method is applied.
     void handleContinuation(int regionIndexOld, int regionIndexNew);
 
+
+    /*
+     * Factory Methods: Get Regions etc.
+     */
+
+
+    void detectOnFrame(Mat frame, vector<Rect> & detected);
 
 
     Mat matrix;
