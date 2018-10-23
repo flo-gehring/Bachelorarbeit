@@ -55,19 +55,22 @@ bool RegionTracker::update(Mat frame) {
  */
 void RegionTracker::calcMatrix() {
 
-    matrix = Mat::zeros(Size(regionLastFrame.size(),
-            regionsNewFrame.size()), CV_8UC1);
+    for (int i = 0; i < 22 ; ++i){
+        for (int r = 0; r<22; ++r){
+            matrix[i][r] = 0;
+        }
+    }
 
 
     Region & oldRegion = regionLastFrame.at(0);
     Region & newRegion = regionsNewFrame.at(0);
 
-    uchar * row_ptr;
 
     for (int  oldRegionCounter = 0; oldRegionCounter < regionLastFrame.size(); ++oldRegionCounter){
+
         oldRegion = regionLastFrame.at(oldRegionCounter);
 
-        row_ptr = matrix.ptr<uchar>(oldRegionCounter);
+
 
         for(int  newRegionCounter = 0; newRegionCounter < regionsNewFrame.size(); ++newRegionCounter){
             newRegion = regionsNewFrame.at(newRegionCounter);
@@ -75,7 +78,7 @@ void RegionTracker::calcMatrix() {
             // If the Regions are associated somehow,
             // highlight this by setting the appropriate entry in the matrix to 1.
             if(Region::regionsAssociated(oldRegion, newRegion)){
-                row_ptr[newRegionCounter] = 1;
+                matrix[oldRegionCounter][ newRegionCounter ] = 1;
             }
 
         }
@@ -98,36 +101,26 @@ void RegionTracker::calcMatrix() {
  */
 void RegionTracker::interpretMatrix() {
 
-    int nCols = matrix.cols;
-    int nRows = matrix.rows;
-
     int associationCounter;
-
-    bool continous;
-    if(matrix.isContinuous()){
-        continous = true;
-        nCols *= nRows;
-        nRows = 1;
-    }
-
-    uchar * row_ptr;
-
     vector<int> associatedIndexes;
 
     // Iterate Row wise to get information about
-    for(int row = 0; row < nRows; ++row){
+
+
+    int row = 0;
+
+    for(int row = 0; row< regionLastFrame.size() ; ++row){
 
         associationCounter = 0;
         associatedIndexes.clear();
 
-        row_ptr = matrix.ptr<uchar>(row);
-
-        for(int column = 0; column < nCols; ++column){
-            if( row_ptr[column] != 0) {
-                associatedIndexes.push_back(column / matrix.cols);
+        for(int col = 0; col < regionsNewFrame.size() ; ++col) {
+            if (matrix[row][col] != 0) {
+                associatedIndexes.push_back(col);
                 ++associationCounter;
             }
         }
+
 
         if(associationCounter == 0){ // Old Regions Dissapears
             handleDisapearance(row);
@@ -139,32 +132,38 @@ void RegionTracker::interpretMatrix() {
             handleSplitting(row, &associatedIndexes[0], associationCounter);
         }
 
+        ++row;
+
     }
 
+
+
     // Iterate Column Wise
-    for (int column = 0; column < nCols; ++column){
+    for (int col = 0; col< regionsNewFrame.size() ; ++col){
+
         associationCounter = 0;
         associatedIndexes.clear();
-        for (int row = 0; row < nRows; ++row){
-            row_ptr = matrix.ptr<uchar>(row);
+        for (int row = 0; row < regionLastFrame.size(); ++row){
 
-            if( row_ptr[column] != 0){
+
+            if( matrix[row][col] != 0){
                 ++associationCounter;
                 associatedIndexes.push_back(row);
             }
         }
         if(associationCounter == 0){ // Region appeared
-            handleAppearance(column);
+            handleAppearance(col);
         }
         else if(associationCounter == 1){ // Either Continuity or split
 
         }
         else if(associationCounter > 1){ // handle Merge
-            handleMerging(&associatedIndexes[0], associationCounter, column);
+            handleMerging(&associatedIndexes[0], associationCounter, col);
         }
     }
 
 }
+
 
 /*
  * Check if the Region is completely new, or if its a region that reappeared.
@@ -332,7 +331,9 @@ void RegionTracker::workOnFile(char *filename) {
     }
 
     initialize(frame);
-
+    drawOnFrame(frame);
+    resize(frame, resizedFrame, Size(1980, 1020));
+    imshow(windowName, resizedFrame);
     video >> frame;
     while(! frame.empty()){
      update(frame);

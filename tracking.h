@@ -100,7 +100,7 @@ protected:
 
 
 
-    Mat  matrix;
+    unsigned short  matrix[22][22];
 
 
     vector<Region> outOfSightRegions;
