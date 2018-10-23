@@ -26,8 +26,7 @@ using namespace cv;
 class FootballPlayer {
 public:
     FootballPlayer(Rect coordinate, int frame, string identifier);
-
-private:
+    void addPosition(Rect coordinates, int frame);
 
     /*
      * Interpret as Follows: If i is an integer in "frames" at position X, then the Football Player appeared
@@ -54,12 +53,15 @@ public:
     vector<FootballPlayer *> playersInRegion;
 
     static bool regionsAssociated(const Region & r1, const Region & r2);
+    void updateObjectsInRegion(int frameNum);
 };
 
 class RegionTracker{
 public:
     int initialize(Mat frame);
     bool update(Mat frame);
+
+    void workOnFile(char * filename);
 
 protected:
     /*
@@ -76,13 +78,13 @@ protected:
     void handleAppearance(int regionIndex);
 
     // Handles the Dissapearance of a Region which has index regionIndex in regionsLastFrame.
-    void handleDissapearance(int regionIndex);
+    void handleDisapearance(int regionIndex);
 
     // Handles the Splitting of the Region regionsLastFrame[regionsIndex] into the given new regions.
-    void handleSplitting(int regionIndex, int splitInto[]);
+    void handleSplitting(int regionIndex, int splitInto[], int num);
 
     // Handles the merging of multiple old regions into a single new region.
-    void handleMerging(int regions[], int mergeInto);
+    void handleMerging(int regions[], int num,  int mergeInto);
 
     // If an old region directly corresponds to a new region, this method is applied.
     void handleContinuation(int regionIndexOld, int regionIndexNew);
@@ -94,9 +96,11 @@ protected:
 
 
     void detectOnFrame(Mat frame, vector<Rect> & detected);
+    void drawOnFrame(Mat frame);
 
 
-    Mat matrix;
+
+    Mat  matrix;
 
 
     vector<Region> outOfSightRegions;
@@ -108,6 +112,11 @@ protected:
 
     MatDetector darknetDetector;
 
+    int objectCounter = 0;
+    int currentFrame = 0;
+
 
 };
+
+void textAboveRect(Mat frame, Rect rect, string text);
 #endif //PANORAMA2CUBEMAP_TRACKING_H

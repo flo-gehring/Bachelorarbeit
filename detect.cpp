@@ -195,7 +195,6 @@ void  MatDetector::print_detections(image im, detection *dets, int num){
         found.back().class_name = "KONSTANT PERSON";
         found.back().prob = scores[*it];
     }
-https://stackoverflow.com/questions/42534129/opencv-error-gtk-2-x-symbols-detected-using-gtk-2-x-and-gtk-3-in-the-same-p#42534279
 }
 
 void MatDetector::remember_network(network *net)
