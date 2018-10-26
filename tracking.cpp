@@ -3,9 +3,32 @@
 //
 
 #include "tracking.h"
+#include <set>
+#ifndef DEBUG
+#define DEBUG
+#endif
+void printMatrix(unsigned  short mat[][22]){
+    int rowsToPrint = 13;
 
+    cout << endl << " ";
+    for(int i = 0; i < rowsToPrint; ++i) cout << i;
+    cout << endl;
+    for(int row = 0; row < rowsToPrint; ++row){
+        cout << row;
+        for(int col = 0; col < rowsToPrint; ++col){
 
+            if(mat[row][col] != 0){
+                cout << "1";
+            }
+            else{
+                cout << " ";
+            }
 
+        }
+        cout << endl;
+    }
+
+}
 int RegionTracker::initialize(Mat frame) {
     currentFrame = 0;
     vector<Rect> detectedRects;
@@ -19,8 +42,9 @@ int RegionTracker::initialize(Mat frame) {
 
     for(auto it = detectedRects.begin(); it != detectedRects.end(); ++it){
 
-        footballPlayers.emplace_back(FootballPlayer((*it), 1, to_string(objectCounter) ));
-        regionsNewFrame.emplace_back(Region(*it, &footballPlayers.back()));
+        footballPlayers.push_back(FootballPlayer((*it), 1, to_string(objectCounter) ));
+        regionsNewFrame.emplace_back(Region(*it, footballPlayers.back().identifier));
+        footballPlayers.back().coordinates.push_back((*it));
         objectCounter++;
 
     }
@@ -42,6 +66,15 @@ bool RegionTracker::update(Mat frame) {
         regionsNewFrame.emplace_back(Region(*it));
     }
 
+    for(auto it1 = regionsNewFrame.begin(); it1 != regionsNewFrame.end(); ++it1){
+        for(auto it2 = regionsNewFrame.begin(); it2 != regionsNewFrame.end(); ++it2){
+            if((it1 != it2) && (it1->coordinates & it2->coordinates).area() > 0)
+            {cerr << "Two Regions cross: "<< endl;
+            printf("Reg1(%i, %i), Reg2(%i, %i)", it1->coordinates.x, it1->coordinates.y, it2->coordinates.x, it2->coordinates.y);
+            }
+        }
+    }
+
     calcMatrix();
 
     interpretMatrix();
@@ -55,6 +88,8 @@ bool RegionTracker::update(Mat frame) {
  */
 void RegionTracker::calcMatrix() {
 
+    float intersectionThreshold = 0.2;
+
     for (int i = 0; i < 22 ; ++i){
         for (int r = 0; r<22; ++r){
             matrix[i][r] = 0;
@@ -62,25 +97,64 @@ void RegionTracker::calcMatrix() {
     }
 
 
-    Region & oldRegion = regionLastFrame.at(0);
-    Region & newRegion = regionsNewFrame.at(0);
+    Region  oldRegion(Rect(0,0,0,0), "-1");
+    Region  newRegion(Rect(0,0,0,0), "-1");
 
+    vector<int> intersections;
+
+    vector<int> associationUnclear;
 
     for (int  oldRegionCounter = 0; oldRegionCounter < regionLastFrame.size(); ++oldRegionCounter){
 
         oldRegion = regionLastFrame.at(oldRegionCounter);
-
-
+        intersections.clear();
 
         for(int  newRegionCounter = 0; newRegionCounter < regionsNewFrame.size(); ++newRegionCounter){
             newRegion = regionsNewFrame.at(newRegionCounter);
 
             // If the Regions are associated somehow,
             // highlight this by setting the appropriate entry in the matrix to 1.
-            if(Region::regionsAssociated(oldRegion, newRegion)){
-                matrix[oldRegionCounter][ newRegionCounter ] = 1;
+            if(Region::regionsIntersect(oldRegion, newRegion)){
+                intersections.push_back(newRegionCounter);
             }
 
+        }
+        if(intersections.size() > 1)
+            associationUnclear.push_back(oldRegionCounter);
+        else if(intersections.size() == 1)
+            matrix[oldRegionCounter][intersections[0]] = 1;
+    }
+
+    /*
+     * Handle the Regions where it is not clear, with which regions from the next frame they are associated with.
+     * ----------------------------------------------------------------------------------------------------------
+     */
+
+    // Get new Regions which intersect with these old Regions
+    vector<int> intersectingRegion;
+    for(int  old : associationUnclear){
+        for(int newR = 0; newR < regionsNewFrame.size(); ++newR){
+         if(Region::regionsIntersect(regionLastFrame[old], regionsNewFrame[newR])) intersectingRegion.push_back(newR);
+        }
+    }
+
+
+
+    // Assign Candiate which matches the most.
+    for(auto oldRegionIterator = associationUnclear.begin(); oldRegionIterator != associationUnclear.end(); ++oldRegionIterator){
+
+        // Sort by how much the Regions intersect with the region from the last frame associated with the current
+        // index.
+        auto sortingFunction =  [oldRegionIterator, this] (int  index1, int index2 )
+                { return
+                  (regionsNewFrame[index1].coordinates & regionLastFrame[(* oldRegionIterator)].coordinates).area() <
+                  (regionsNewFrame[index2].coordinates & regionLastFrame[(* oldRegionIterator)].coordinates).area();};
+
+        std::sort(intersectingRegion.begin(), intersectingRegion.end(), sortingFunction);
+        int bestMatch = intersectingRegion.back();
+
+        if( (regionLastFrame[(*oldRegionIterator)].coordinates & regionsNewFrame[bestMatch].coordinates).area() > 0){
+            matrix[(*oldRegionIterator)][bestMatch] = 1;
         }
 
     }
@@ -103,12 +177,18 @@ void RegionTracker::interpretMatrix() {
 
     int associationCounter;
     vector<int> associatedIndexes;
-
+    printMatrix(matrix);
     // Iterate Row wise to get information about
 
+    // remember the new Regions which came from a split, so you dont confuse it with
+    // a continuation later on.
+    set<int> regionsFromSplit;
 
     int row = 0;
 
+    /*Iterate every row.
+     * We now know, if the old Region which is represented by this row, either disappears or splits into multiple new.
+     */
     for(int row = 0; row< regionLastFrame.size() ; ++row){
 
         associationCounter = 0;
@@ -121,22 +201,15 @@ void RegionTracker::interpretMatrix() {
             }
         }
 
-
         if(associationCounter == 0){ // Old Regions Dissapears
+
             handleDisapearance(row);
-        }
-        else if(associationCounter  == 1){ // Either Merge or Continue
-            handleContinuation(row, associatedIndexes[0]);
         }
         else if(associationCounter > 1) { // Split
             handleSplitting(row, &associatedIndexes[0], associationCounter);
+            regionsFromSplit.insert(associatedIndexes.begin(), associatedIndexes.end());
         }
-
-        ++row;
-
     }
-
-
 
     // Iterate Column Wise
     for (int col = 0; col< regionsNewFrame.size() ; ++col){
@@ -147,17 +220,21 @@ void RegionTracker::interpretMatrix() {
 
 
             if( matrix[row][col] != 0){
+
                 ++associationCounter;
                 associatedIndexes.push_back(row);
             }
         }
         if(associationCounter == 0){ // Region appeared
+
             handleAppearance(col);
         }
-        else if(associationCounter == 1){ // Either Continuity or split
+        else if(associationCounter == 1 && regionsFromSplit.find(col) == regionsFromSplit.end()){ // Either Continuity or split
 
+            handleContinuation(associatedIndexes[0], col);
         }
         else if(associationCounter > 1){ // handle Merge
+
             handleMerging(&associatedIndexes[0], associationCounter, col);
         }
     }
@@ -171,12 +248,14 @@ void RegionTracker::interpretMatrix() {
  * Fill Football Player with information
  */
 void RegionTracker::handleAppearance(int regionIndex) {
-    Region newRegion = regionsNewFrame[regionIndex];
+    Region & newRegion = regionsNewFrame[regionIndex];
     for (auto region = outOfSightRegions.begin(); region != outOfSightRegions.end(); ++region){
 
-        if(Region::regionsAssociated(* region, regionsNewFrame[regionIndex])){
-            // TODO: Perform Additional Checking and such. This is very basic and probably not usefull
-
+        if(Region::regionsIntersect(* region, regionsNewFrame[regionIndex])){
+            // TODO: Perform Additional Checking and such. This is very basic and probably not useful
+#ifdef DEBUG
+            printf("Region %i appeared and was identified to be an old Region.\n", regionIndex);
+#endif
             region->coordinates = newRegion.coordinates;
             region->updateObjectsInRegion(currentFrame);
             regionsNewFrame[regionIndex] = *region;
@@ -188,11 +267,16 @@ void RegionTracker::handleAppearance(int regionIndex) {
     // If no suiting out of sight region was found, create a new one.
     ++objectCounter;
     footballPlayers.emplace_back(FootballPlayer(newRegion.coordinates, currentFrame, to_string(objectCounter)));
-
-    newRegion.playersInRegion.push_back(& footballPlayers.back());
+#ifdef DEBUG
+    printf("Region %i appeared and was identified to be new Region. \n", regionIndex);
+#endif
+    newRegion.playerIds.emplace_back(string(footballPlayers.back().identifier));
 }
 
 void RegionTracker::handleDisapearance(int regionIndex) {
+#ifdef DEBUG
+    printf("Region %i disappears.\n", regionIndex);
+#endif
 
     outOfSightRegions.push_back(regionLastFrame[regionIndex]);
 
@@ -203,58 +287,34 @@ void RegionTracker::handleDisapearance(int regionIndex) {
  * At first, we'll simply compare histogramms.
  */
 void RegionTracker::handleSplitting(int regionIndex, int *splitInto, int num) {
+#ifdef DEBUG
+    string s = "";
+    for (int i= 0; i < num; ++i) s += " " + to_string(splitInto[i]) +",";
+    const char * s_char = s.c_str();
+    printf("Splitting Region %i into %s. \n", regionIndex, s_char);
+#endif
 
-    Region oldRegion = regionLastFrame[regionIndex];
-
-    vector<Region *> newRegions;
-    for(int i = 0; i < num; ++i) {
-        newRegions.push_back(&regionsNewFrame[*(splitInto + i)]);
+    // TODO Just add new Football Players for the beginning
+    for(int i = 0; i < num; ++i){
+        Region & r = regionsNewFrame.at(splitInto[i]);
+        ++objectCounter;
+        footballPlayers.emplace_back(FootballPlayer(r.coordinates, currentFrame, to_string(objectCounter)));
+        r.playerIds.push_back(to_string(objectCounter));
     }
 
-    /*  1.  If there are less objects in the old region than there are new Regions, then try to determine where the old objects
-            went and create new ones.
-        2.  If the amount of objects in the old Region is the same as there are new Regions, then try to assign the objects.
-        3. If there are more objects in the old Region than there are new Regions, do some precission guesswork and assign the objects.
-     */
-    if(oldRegion.playersInRegion.size() <= newRegions.size()){
-        // TODO: Do this right.
-        // For now, i simply put the First few tracked objects into the first few regions and create some new Players
-        int playerCounter = 0;
-        for(auto r =  newRegions.begin(); r != newRegions.end(); ++r){
-
-            if(playerCounter < newRegions.size())
-                (*r)->playersInRegion.push_back(oldRegion.playersInRegion[playerCounter]);
-            else{ // New Football player
-
-                ++objectCounter;
-                footballPlayers.emplace_back(FootballPlayer((*r)->coordinates, currentFrame, to_string(objectCounter)));
-
-                (*r)->playersInRegion.push_back(& footballPlayers.back());
-            }
-        }
-
-    }
-    else{
-        // TODO this |||
-        // TODO      vvv
-        // Assign the first couple of players to the first region, the rest gets one player
-        int playerCounter;
-        for (playerCounter  = 0; playerCounter < newRegions.size() - oldRegion.playersInRegion.size(); ++playerCounter){
-            newRegions[0]->playersInRegion.emplace_back(oldRegion.playersInRegion[playerCounter]);
-        }
-        for(auto r: newRegions){
-
-            r->playersInRegion.emplace_back(oldRegion.playersInRegion[playerCounter]);
-            ++playerCounter;
-            r->updateObjectsInRegion(currentFrame);
-        }
-    }
 }
 
 /*
  * Throw stuff together in one region.
  */
 void RegionTracker::handleMerging(int *regions, int num, int mergeInto) {
+
+#ifdef DEBUG
+    string s = "";
+    for (int i= 0; i < num; ++i) s += " " + to_string(regions[i]) +",";
+    const char * s_char = s.c_str();
+    printf("Merging Regions%s into %i. \n", s_char, mergeInto);
+#endif
 
     Region * newRegion = &regionsNewFrame[mergeInto];
     vector<Region *> oldRegions;
@@ -264,27 +324,42 @@ void RegionTracker::handleMerging(int *regions, int num, int mergeInto) {
 
     // Insert all the tracked Objects into the new Region
     for(auto r = oldRegions.begin(); r != oldRegions.end(); ++r ){
-        newRegion->playersInRegion.insert(newRegion->playersInRegion.end(),
-                (*r)->playersInRegion.begin(), (*r)->playersInRegion.end());
+        for (auto n = (*r)->playerIds.begin(); n != (*r)->playerIds.end(); ++n){
+            newRegion->playerIds.emplace_back(string(*n));
+        }
+
     }
 
-    // Update the tracked Objects
-    newRegion->updateObjectsInRegion(currentFrame);
 }
 
 /*
  * Supply the new region with the Players of the old region.
  */
 void RegionTracker::handleContinuation(int regionIndexOld, int regionIndexNew) {
-    //TODO: This.
+    Region & oldRegion = regionLastFrame[regionIndexOld];
+    Region & newRegion = regionsNewFrame[regionIndexNew];
+    /*
+    for(auto trackedObject = oldRegion.playersInRegion.begin(); trackedObject != oldRegion.playersInRegion.end();++trackedObject ){
+        newRegion.playersInRegion.push_back(* trackedObject);
+    }
+     */
+#ifdef DEBUG
+    printf("Continue Region %i to %i.\n", regionIndexOld, regionIndexNew);
+#endif
+    newRegion.playerIds.emplace_back(string(oldRegion.playerIds.back()));
+    //newRegion.updateObjectsInRegion(currentFrame);
+
 }
 
 void RegionTracker::detectOnFrame(Mat frame, vector<Rect> &detected) {
-
     int sideLength = 500;
-
     Mat face;
     Rect panoramaCoords;
+
+    vector<float> scores;
+    vector<int> indices;
+    vector<Rect> tmpDetected;
+
     for(int faceId = 0; faceId < 6; ++faceId){
         createCubeMapFace(frame, face, faceId, sideLength, sideLength);
         darknetDetector.detect_and_display(face);
@@ -294,10 +369,17 @@ void RegionTracker::detectOnFrame(Mat frame, vector<Rect> &detected) {
 
             mapRectangleToPanorama(frame, faceId, sideLength, sideLength, (* detectedObjects).rect, panoramaCoords);
 
-            detected.push_back(panoramaCoords);
+            tmpDetected.push_back(panoramaCoords);
+            scores.push_back((*detectedObjects).prob);
 
         }
 
+    }
+
+    // Perfrorm NMS on detected Recangles and copy accepted rects to detected
+    dnn::NMSBoxes(tmpDetected, scores, 0.4f, 0.2f, indices);
+    for(int i : indices){
+        detected.emplace_back(Rect(tmpDetected[i]));
     }
 
 }
@@ -305,9 +387,9 @@ void RegionTracker::detectOnFrame(Mat frame, vector<Rect> &detected) {
 void RegionTracker::drawOnFrame(Mat frame) {
     for (Region & r: regionsNewFrame){
         string id;
-        for(FootballPlayer * player : r.playersInRegion) id += " " + player->identifier;
+        for(string player : r.playerIds) id += " " + player;
 
-        textAboveRect(frame, r.coordinates, id);
+         textAboveRect(frame, r.coordinates, id);
         rectangle(frame, r.coordinates, Scalar(0, 0, 255), 2);
 
     }
@@ -334,13 +416,23 @@ void RegionTracker::workOnFile(char *filename) {
     drawOnFrame(frame);
     resize(frame, resizedFrame, Size(1980, 1020));
     imshow(windowName, resizedFrame);
+    waitKey(30);
     video >> frame;
     while(! frame.empty()){
      update(frame);
+
+     int counter = 0;
+     for(Region region : regionsNewFrame){
+
+         CV_Assert(region.playerIds.size() > 0);
+         ++counter;
+     }
+
      drawOnFrame(frame);
 
      resize(frame, resizedFrame, Size(1980, 1020));
      imshow(windowName, resizedFrame);
+     waitKey(30);
 
      video >> frame;
 
@@ -353,20 +445,19 @@ void RegionTracker::workOnFile(char *filename) {
  * Adds the Position of the Region and the current Frame to the tracked objects in the Region.
  */
 void Region::updateObjectsInRegion(int frameNum) {
-    for(auto trackedObject : playersInRegion){
-        trackedObject->addPosition(coordinates, frameNum);
-    }
+ // TODO    for(auto id = this->playerIds.begin(); id != playerIds.end(); ++id){
+  //  }
 }
 
 
-Region::Region(const Rect &coordinates, FootballPlayer *playersInRegion) {
+Region::Region(const Rect &coordinates, string playerID) {
     this->coordinates = coordinates;
-    this->playersInRegion.push_back(playersInRegion);
+    this->playerIds.push_back(playerID);
 }
 
 FootballPlayer::FootballPlayer(Rect coordinate, int frame, string identifier) {
 
-    coordinates.emplace_back(coordinate);
+    // coordinates.emplace_back(coordinate);
     frames.emplace_back(frame);
     this->identifier = identifier;
 
@@ -382,7 +473,7 @@ Region::Region(Rect coordinates) {
 }
 
 
-bool Region::regionsAssociated(const Region &r1, const Region &r2) {
+bool Region::regionsIntersect(const Region &r1, const Region &r2){
     return ((r1.coordinates & r2.coordinates).area() > 0);
 
 }
@@ -393,6 +484,6 @@ void textAboveRect(Mat frame, Rect rect, string text) {
     y = rect.y;
 
     y -= 5; // Shift the text above the rect
-    putText(frame,text, Point(x,y), FONT_HERSHEY_SIMPLEX, 1.2, Scalar(0,0,255));
+    putText(frame,text, Point(x,y), FONT_HERSHEY_PLAIN, 3, Scalar(0,0,255), 2);
 
 }

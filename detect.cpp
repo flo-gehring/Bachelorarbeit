@@ -80,10 +80,10 @@ void MatDetector::detect_and_display(cv::Mat input_mat){
     if (nms > 0) do_nms_obj(dets, nboxes, l.classes, nms);
 
 
-    printf("\033[2J");
-    printf("\033[1;1H");
-    printf("\nFPS:%.1f\n",fps);
-    printf("Objects:\n\n");
+    // printf("\033[2J");
+    // printf("\033[1;1H");
+    // printf("\nFPS:%.1f\n",fps);
+    // printf("Objects:\n\n");
     image display = darknet_image;
     // draw_detections(display, dets, nboxes, demo_thresh, demo_names, demo_alphabet, demo_classes);
     print_detections(display, dets, nboxes);
@@ -152,7 +152,7 @@ void  MatDetector::print_detections(image im, detection *dets, int num){
                     strcat(labelstr, ", ");
                     strcat(labelstr, demo_names[j]);
                 }
-                printf("%s: %.0f%%\n", demo_names[j], dets[i].prob[j] * 100);
+                // printf("%s: %.0f%%\n", demo_names[j], dets[i].prob[j] * 100);
                 prob = dets[i].prob[j] * 100;
             }
         }
@@ -170,8 +170,9 @@ void  MatDetector::print_detections(image im, detection *dets, int num){
             if(right > im.w-1) right = im.w-1;
             if(top < 0) top = 0;
             if(bot > im.h-1) bot = im.h-1;
-            printf("%s: %f \n Left/Right/Top/Bot: %i/%i/%i/%i", labelstr,
-                    prob, left, right, top, bot);
+
+            // printf("%s: %f \n Left/Right/Top/Bot: %i/%i/%i/%i", labelstr,
+            //         prob, left, right, top, bot);
 
             bboxes.push_back(cv::Rect(cv::Point(left, top),
                     cv::Point(right, bot)));
@@ -185,7 +186,7 @@ void  MatDetector::print_detections(image im, detection *dets, int num){
      * TODO: Replace class_name placeholder with correct Class
      * TODO: Make nms threshold and confidence Threhsold a variable.
      */
-    cv::dnn::NMSBoxes(bboxes, scores, .5, 0.5, indices);
+    cv::dnn::NMSBoxes(bboxes, scores, .5, 0.1, indices);
     for(auto it = indices.begin(); it != indices.end(); ++it){
 
         found.push_back(AbsoluteBoundingBoxes());

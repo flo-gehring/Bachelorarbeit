@@ -13,6 +13,7 @@
 
 #include <opencv2/videoio.hpp>
 #include <opencv2/highgui.hpp>
+#include <opencv2/dnn.hpp>
 #include <iostream>
 #include <cstring>
 #include <ctime>
@@ -46,13 +47,14 @@ public:
 
 class Region{
 public:
-    Region(const Rect &coordinates,  FootballPlayer * playersInRegion);
+    Region(const Rect &coordinates,  string playerID);
     Region(Rect coordinates);
 
     Rect coordinates;
-    vector<FootballPlayer *> playersInRegion;
+    // vector<FootballPlayer *> playersInRegion;
+    vector<string> playerIds;
 
-    static bool regionsAssociated(const Region & r1, const Region & r2);
+    static bool regionsIntersect(const Region & r1, const Region & r2);
     void updateObjectsInRegion(int frameNum);
 };
 
