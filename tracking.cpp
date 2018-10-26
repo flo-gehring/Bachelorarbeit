@@ -102,61 +102,56 @@ void RegionTracker::calcMatrix() {
 
     vector<int> intersections;
 
-    vector<int> associationUnclear;
+    double sharedArea, areaNewRegion;
 
-    for (int  oldRegionCounter = 0; oldRegionCounter < regionLastFrame.size(); ++oldRegionCounter){
+    // vector<int> associationUnclear;
 
-        oldRegion = regionLastFrame.at(oldRegionCounter);
-        intersections.clear();
+    vector<int> regionsNewFrameIndices(regionsNewFrame.size());
+    std::iota(regionsNewFrameIndices.begin(), regionsNewFrameIndices.end(), 0);
 
-        for(int  newRegionCounter = 0; newRegionCounter < regionsNewFrame.size(); ++newRegionCounter){
-            newRegion = regionsNewFrame.at(newRegionCounter);
-
-            // If the Regions are associated somehow,
-            // highlight this by setting the appropriate entry in the matrix to 1.
-            if(Region::regionsIntersect(oldRegion, newRegion)){
-                intersections.push_back(newRegionCounter);
-            }
-
-        }
-        if(intersections.size() > 1)
-            associationUnclear.push_back(oldRegionCounter);
-        else if(intersections.size() == 1)
-            matrix[oldRegionCounter][intersections[0]] = 1;
-    }
-
-    /*
-     * Handle the Regions where it is not clear, with which regions from the next frame they are associated with.
-     * ----------------------------------------------------------------------------------------------------------
-     */
-
-    // Get new Regions which intersect with these old Regions
-    vector<int> intersectingRegion;
-    for(int  old : associationUnclear){
-        for(int newR = 0; newR < regionsNewFrame.size(); ++newR){
-         if(Region::regionsIntersect(regionLastFrame[old], regionsNewFrame[newR])) intersectingRegion.push_back(newR);
-        }
-    }
-
-
-
+    // Get Associations between regions by amount of overlapping
     // Assign Candiate which matches the most.
-    for(auto oldRegionIterator = associationUnclear.begin(); oldRegionIterator != associationUnclear.end(); ++oldRegionIterator){
+    for(int oldRegionIndex = 0; oldRegionIndex < regionLastFrame.size(); ++oldRegionIndex){
 
         // Sort by how much the Regions intersect with the region from the last frame associated with the current
         // index.
-        auto sortingFunction =  [oldRegionIterator, this] (int  index1, int index2 )
-                { return
-                  (regionsNewFrame[index1].coordinates & regionLastFrame[(* oldRegionIterator)].coordinates).area() <
-                  (regionsNewFrame[index2].coordinates & regionLastFrame[(* oldRegionIterator)].coordinates).area();};
+        auto sortingFunction =  [oldRegionIndex, this] (int  index1, int index2 )
+        { return
+                (regionsNewFrame[index1].coordinates & regionLastFrame[oldRegionIndex].coordinates).area() <
+                (regionsNewFrame[index2].coordinates & regionLastFrame[oldRegionIndex].coordinates).area();};
 
-        std::sort(intersectingRegion.begin(), intersectingRegion.end(), sortingFunction);
-        int bestMatch = intersectingRegion.back();
+        std::sort(regionsNewFrameIndices.begin(), regionsNewFrameIndices.end(), sortingFunction);
+        int bestMatch = regionsNewFrameIndices.back();
 
-        if( (regionLastFrame[(*oldRegionIterator)].coordinates & regionsNewFrame[bestMatch].coordinates).area() > 0){
-            matrix[(*oldRegionIterator)][bestMatch] = 1;
+        sharedArea = (regionLastFrame[oldRegionIndex].coordinates & regionsNewFrame[bestMatch].coordinates).area();
+        if( sharedArea / regionsNewFrame[bestMatch].coordinates.area() > areaThreshold){
+            matrix[oldRegionIndex][bestMatch] = 1;
         }
 
+    }
+
+    // If there is a new Region left which is not associated with any old Region and there is an old Region with which
+    // it overlaps greatly, thats a case for splitting. Iterate matrix
+
+    int associationCounter = 0;
+
+
+    for(int col = 0; col < regionsNewFrame.size(); ++col){
+        associationCounter = 0;
+        newRegion = regionsNewFrame[col];
+        areaNewRegion = newRegion.coordinates.area();
+        for(int row = 0; row < regionLastFrame.size(); ++row){
+            oldRegion = regionLastFrame[row];
+
+            sharedArea = (newRegion.coordinates & oldRegion.coordinates).area();
+            if( (sharedArea/  areaNewRegion) > areaThreshold && matrix[row][col] != 1){ // matrix[row][col] != 1 is unnecessary but when debugging it only stops in relevant cases
+#ifdef DEBUG
+            if(matrix[row][col] != 1)    printf("New Region %i will split old Region %i", col, row );
+#endif
+                matrix[row][col] = 1;
+
+            }
+        }
     }
 
 
@@ -288,7 +283,7 @@ void RegionTracker::handleDisapearance(int regionIndex) {
  */
 void RegionTracker::handleSplitting(int regionIndex, int *splitInto, int num) {
 #ifdef DEBUG
-    string s = "";
+    string s;
     for (int i= 0; i < num; ++i) s += " " + to_string(splitInto[i]) +",";
     const char * s_char = s.c_str();
     printf("Splitting Region %i into %s. \n", regionIndex, s_char);

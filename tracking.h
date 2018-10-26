@@ -14,9 +14,11 @@
 #include <opencv2/videoio.hpp>
 #include <opencv2/highgui.hpp>
 #include <opencv2/dnn.hpp>
+
 #include <iostream>
 #include <cstring>
 #include <ctime>
+#include <numeric>
 
 #include "cubetransform.h"
 
@@ -101,8 +103,10 @@ protected:
     void drawOnFrame(Mat frame);
 
 
+    double areaThreshold = 0.3;
 
-    unsigned short  matrix[22][22];
+    static const int matrixDimensions = 22;
+    unsigned short  matrix[matrixDimensions][matrixDimensions];
 
 
     vector<Region> outOfSightRegions;
