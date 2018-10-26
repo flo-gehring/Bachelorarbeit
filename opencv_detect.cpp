@@ -159,6 +159,7 @@ void YOLODetector::postprocess(Mat& frame, const std::vector<Mat>& outs, Net& ne
     std::vector<int> indices;
     // Perform Non Maximum Suppression on the bounding Boxes
     NMSBoxes(boxes, confidences, confThreshold, nmsThreshold, indices);
+
     for (size_t i = 0; i < indices.size(); ++i)
     {
         int idx = indices[i];
