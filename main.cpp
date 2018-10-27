@@ -2,7 +2,9 @@
 #include <string>   // for strings
 
 
-
+/* TODO Since Merging / Splitting does not work reliably, i should probably, when two regions are merging, just put all the
+    players into the outOfSightBox (and therefor let this be a FootballPlayer vector and not a Region vector.)
+ */
 #include <opencv2/opencv.hpp>
 #include <opencv2/core.hpp>     // Basic OpenCV structures (cv::Mat, Scalar)
 #include <opencv2/videoio.hpp>
@@ -39,6 +41,8 @@ int main(int argc, char *argv[]) {
     }
     stringstream conv;
     char * video_path = argv[5];
+
+    VideoCapture vc(video_path);
 
     RegionTracker rt;
     rt.workOnFile(video_path);

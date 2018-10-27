@@ -57,6 +57,7 @@ public:
     vector<string> playerIds;
 
     static bool regionsIntersect(const Region & r1, const Region & r2);
+    static bool regionsInRelativeProximity(Region const & r1, Region const &r2, int framesPassed);
     void updateObjectsInRegion(int frameNum);
 };
 
@@ -98,6 +99,8 @@ protected:
      * Factory Methods: Get Regions etc.
      */
 
+    FootballPlayer playerById(string id);
+
 
     void detectOnFrame(Mat frame, vector<Rect> & detected);
     void drawOnFrame(Mat frame);
@@ -120,9 +123,11 @@ protected:
 
     int objectCounter = 0;
     int currentFrame = 0;
+    Mat matCurrentFrame;
 
 
 };
 
 void textAboveRect(Mat frame, Rect rect, string text);
+void histFromRect(Mat const & input, Rect const & rect, Mat & output);
 #endif //PANORAMA2CUBEMAP_TRACKING_H
