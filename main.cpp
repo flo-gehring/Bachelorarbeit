@@ -16,6 +16,7 @@
 #include "opencv_detect.h"
 #include "detect.h"
 #include "tracking.h"
+#include "opencv_tracking.h"
 
 using namespace cv;
 using namespace dnn;
@@ -44,9 +45,33 @@ int main(int argc, char *argv[]) {
 
     VideoCapture vc(video_path);
 
-    RegionTracker rt;
-    rt.workOnFile(video_path);
+    MatDetector matDetector;
 
+    string trackers[] = {
+            //"GOTURN",
+            "KCF",
+            "Boosting",
+            "MedianFlow",
+            "MIL",
+            "TLD",
+            "MOSSE"
+
+    };
+    int numTrackers = sizeof(trackers) / sizeof(string);
+    string tracker;
+
+
+    for(int i = 0; i < numTrackers; ++i) {
+        tracker = trackers[i];
+        tracker.append("_fps.mp4");
+        cout << "Beginn tracking with "<< tracker << endl;
+        trackVideo(video_path, tracker , trackers[i], matDetector);
+    }
+    // RegionTracker rt;
+    // rt.workOnFile(video_path);
+
+
+/*
 
     YOLODetector yoloDetector(argv[2], argv[3], argv[4]);
 
@@ -60,6 +85,7 @@ int main(int argc, char *argv[]) {
     else if(strcmp(argv[1], "darknet") == 0){
         darknet_predictions(video_path);
     }
+*/
 
     return 0;
 }

@@ -12,6 +12,11 @@ cmake-build-debug/*
 .idea/**/dictionaries
 .idea/**/shelf
 
+#GOTURN Zeug
+goturn.caffemodel
+goturn.prototxt
+
+*.mp4
 
 
 # Generated files
