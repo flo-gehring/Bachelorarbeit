@@ -7,17 +7,17 @@
 #ifndef DEBUG
 #define DEBUG
 #endif
+#define SHOW
 
 
 // TODO: Change so that every Region only has one Player (<-> Distinction between Region and Player Reasonable? I guess yes!)
 
 // TODO: Save Information about every Player in their Objects
 
-// TODO: Better Method than to get the Object by their String id? Reference or something
 
 // TODO: Velocity information for better prediction
 
-// TODO Save Information about Regions and so on in File
+// TODO: Save Information about Regions and so on in File
 
 void printMatrix(unsigned  short mat[][22]){
     int rowsToPrint = 13;
@@ -55,13 +55,16 @@ int RegionTracker::initialize(Mat frame) {
 
     objectCounter = 0;
 
+    FootballPlayer * newPlayer;
     for(auto it = detectedRects.begin(); it != detectedRects.end(); ++it){
 
-        footballPlayers.emplace_back(FootballPlayer((*it), 1, to_string(objectCounter)));
-        regionsNewFrame.emplace_back(Region(*it, footballPlayers.back().identifier));
-        footballPlayers.back().coordinates.push_back((*it));
+        newPlayer = new FootballPlayer((*it), 1, to_string(objectCounter));
 
-        histFromRect(frame, (*it), footballPlayers.back().hist);
+        footballPlayers.emplace_back(newPlayer);
+        regionsNewFrame.emplace_back(Region(*it,  footballPlayers.back()));
+        footballPlayers.back()->coordinates.push_back((*it));
+
+        histFromRect(frame, (*it), footballPlayers.back()->hist);
         objectCounter++;
 
     }
@@ -123,8 +126,8 @@ void RegionTracker::calcMatrix() {
     }
 
 
-    Region  oldRegion(Rect(0,0,0,0), "-1");
-    Region  newRegion(Rect(0,0,0,0), "-1");
+    Region  oldRegion(Rect(0,0,0,0), NULL);
+    Region  newRegion(Rect(0,0,0,0), NULL);
 
     vector<int> intersections;
 
@@ -294,7 +297,7 @@ void RegionTracker::handleAppearance(int regionIndex) {
             printf("Region %i appeared and was identified to be an old Region.\n", regionIndex);
 
 
-            fprintf(debugData, "Region %i:  Appeared and was identified to be an old Region.\n It now contains Player %s. \n", regionIndex, region->playerIds[0].c_str());
+            fprintf(debugData, "Region %i:  Appeared and was identified to be an old Region.\n It now contains Player %s. \n", regionIndex, region->playerInRegion->identifier.c_str());
 #endif
             region->coordinates = newRegion.coordinates;
             region->updateObjectsInRegion(currentFrame);
@@ -305,25 +308,30 @@ void RegionTracker::handleAppearance(int regionIndex) {
             return;
         }
     }
+
+
     // If no suiting out of sight region was found, create a new one.
     ++objectCounter;
-    footballPlayers.emplace_back(FootballPlayer(newRegion.coordinates, currentFrame, to_string(objectCounter)));
+
+    FootballPlayer * newPlayer = new FootballPlayer(newRegion.coordinates, currentFrame, to_string(objectCounter));
+    footballPlayers.emplace_back(newPlayer);
 
     // Calculate Histogramm
-    histFromRect(matCurrentFrame, newRegion.coordinates, footballPlayers.back().hist);
+    histFromRect(matCurrentFrame, newRegion.coordinates, footballPlayers.back()->hist);
 #ifdef DEBUG
     fprintf(debugData, "Region %i: Appeared and is a new Region.  It now contains NEW Player %s. \n", regionIndex, to_string(objectCounter).c_str());
     printf("Region %i appeared and was identified to be new Region. \n", regionIndex);
 #endif
 
-    newRegion.playerIds.emplace_back(string(footballPlayers.back().identifier));
+    newRegion.playerInRegion = footballPlayers.back();
 }
 
 void RegionTracker::handleDisapearance(int regionIndex) {
-#ifdef DEBUG
+
+    #ifdef DEBUG
     printf("Region %i disappears.\n", regionIndex);
     fprintf(debugData, "Region %i: \n Disappears. It did contain Player %s",
-            regionIndex, regionLastFrame[regionIndex].playerIds[0].c_str());
+            regionIndex, regionLastFrame[regionIndex].playerInRegion->identifier.c_str());
 #endif
 
     outOfSightRegions.push_back(regionLastFrame[regionIndex]);
@@ -336,14 +344,13 @@ void RegionTracker::handleDisapearance(int regionIndex) {
  */
 void RegionTracker::handleSplitting(int regionIndex, int *splitInto, int num) {
 
-
     #ifdef DEBUG
     string s;
     for (int i= 0; i < num; ++i) s += " " + to_string(splitInto[i]) +",";
     const char * s_char = s.c_str();
     printf("Splitting Region %i into %s. \n", regionIndex, s_char);
     fprintf(debugData, "Splitting Region %i into %s. \n", regionIndex, s_char);
-#endif
+    #endif
 
     vector<Region *> splitRegions;
     for(int i = 0; i < num; ++i){
@@ -351,32 +358,30 @@ void RegionTracker::handleSplitting(int regionIndex, int *splitInto, int num) {
     }
 
 
-    vector<FootballPlayer> playersInSplittingRegion;
-    for(string const & id : regionLastFrame[regionIndex].playerIds){
-        playersInSplittingRegion.push_back(playerById(id));
-    }
 
     int bestGuess;
     Mat histPlayer;
 
+    Region & splittingRegion = regionLastFrame[regionIndex];
 
-    // Assign existing Players to Region.
-    for(FootballPlayer player: playersInSplittingRegion){
-
-        histPlayer = player.hist;
-        auto sortingFunction = [histPlayer, this](Region const * reg1, Region const * reg2)
+    histPlayer = splittingRegion.playerInRegion->hist;
+    auto sortingFunction = [histPlayer, this](Region const * reg1, Region const * reg2)
         {        Mat hist1, hist2;
             histFromRect(matCurrentFrame, reg1->coordinates, hist1);
             histFromRect(matCurrentFrame, reg2->coordinates, hist2);
             return compareHist(histPlayer, hist1, CV_COMP_CORREL) < compareHist(histPlayer, hist2, CV_COMP_CORREL); };
-        std::sort(splitRegions.begin(), splitRegions.end(), sortingFunction);
 
-        splitRegions.front()->playerIds.push_back(player.identifier);
+    // TODO: Im assigning this Player in any case. This probably shouldnt be like this.
+    std::sort(splitRegions.begin(), splitRegions.end(), sortingFunction);
+
+    // TODO: When there is movement data etc, available, do i need to tranfer or should i simply save it in the Player?
+    splitRegions.front()->playerInRegion = splittingRegion.playerInRegion;
+
 #ifdef DEBUG
-        fprintf(debugData, "Player %s from the old Region was assigned to a new Region\n", player.identifier.c_str());
+        fprintf(debugData, "Player %s from the old Region was assigned to a new Region\n", splittingRegion.playerInRegion->identifier.c_str());
 #endif
 
-    }
+
 
     // If A region was not assigned a player from the Region which split up, search for a player which is currently
     // out of sight and would fit.
@@ -387,24 +392,24 @@ void RegionTracker::handleSplitting(int regionIndex, int *splitInto, int num) {
     Mat histOfRegion, histOfPlayer;
 
     for (Region * region: splitRegions){
-        if(region->playerIds.empty()){
+        if(region->playerInRegion == NULL){
 
             // Search out of sight regions
             for (auto  outofsight = outOfSightRegions.begin(); outofsight != outOfSightRegions.end(); ++outofsight){
 
                 regionsIntersect = Region::regionsInRelativeProximity(* outofsight, *region, 7); // TODO: A way to get the frames that have passed.
-                histOfPlayer = playerById(outofsight->playerIds[0]).hist; //TODO: This for a region with multiple players
+                histOfPlayer = outofsight->playerInRegion->hist;
                 histFromRect(matCurrentFrame, region->coordinates, histOfRegion);
 
                 histogrammsSimmiliar = compareHist(histOfPlayer, histOfRegion, CV_COMP_CORREL) > histTreshold;
 
                 if(regionsIntersect  && histogrammsSimmiliar){
-                    for(string const & playerID: outofsight->playerIds){
-                        region->playerIds.emplace_back(string(playerID));
+
+                    region->playerInRegion =  outofsight->playerInRegion;
 #ifdef DEBUG
-                        fprintf(debugData, "Player %s which was out of sight was assigned to a Region emerging from the split \n", playerID.c_str());
+                        fprintf(debugData, "Player %s which was out of sight was assigned to a Region emerging from the split \n", outofsight->playerInRegion->identifier.c_str());
 #endif
-                    }
+
 
                     outOfSightRegions.erase(outofsight);
                     break; // Break inner loop
@@ -414,9 +419,10 @@ void RegionTracker::handleSplitting(int regionIndex, int *splitInto, int num) {
             // if no such region was found, create a new player
             if (! regionsIntersect || ! histogrammsSimmiliar){
                 ++objectCounter;
-                footballPlayers.emplace_back(FootballPlayer(region->coordinates,currentFrame, string(to_string(objectCounter))));
-                histFromRect(matCurrentFrame, region->coordinates, footballPlayers.back().hist);
-                region->playerIds.emplace_back(string(to_string(objectCounter)));
+                FootballPlayer * newPlayer = new FootballPlayer(region->coordinates,currentFrame, string(to_string(objectCounter)));
+                footballPlayers.emplace_back(newPlayer);
+                histFromRect(matCurrentFrame, region->coordinates, footballPlayers.back()->hist);
+                region->playerInRegion = newPlayer;
 #ifdef DEBUG
                 fprintf(debugData, "New Player %s created! \n", to_string(objectCounter).c_str());
 #endif
@@ -441,17 +447,17 @@ void RegionTracker::handleMerging(int *regions, int num, int mergeInto) {
 #endif
 
     Region * newRegion = &regionsNewFrame[mergeInto];
+
     vector<Region *> oldRegions;
     for(int i = 0; i < num; ++i) {
         oldRegions.push_back(&regionLastFrame[*(regions + i)]);
     }
 
-    vector<FootballPlayer> playersInOldRegion;
+    vector<FootballPlayer *> playersInOldRegion;
 
     for(auto r = oldRegions.begin(); r != oldRegions.end(); ++r ){
-        for (auto n = (*r)->playerIds.begin(); n != (*r)->playerIds.end(); ++n){
-            playersInOldRegion.push_back( playerById(*n));
-        }
+            playersInOldRegion.push_back( (*r)->playerInRegion);
+
 
     }
     Mat histOfRegion;
@@ -459,31 +465,28 @@ void RegionTracker::handleMerging(int *regions, int num, int mergeInto) {
 
 
     // Get the Best Guess as ID for the new region
-    auto sortingFunction = [histOfRegion](FootballPlayer f1, FootballPlayer f2){
+    auto sortingFunction = [histOfRegion](FootballPlayer * f1, FootballPlayer * f2){
 
-        return compareHist(histOfRegion, f1.hist, CV_COMP_CORREL) < compareHist(histOfRegion, f2.hist, CV_COMP_CORREL);
+        return compareHist(histOfRegion, f1->hist, CV_COMP_CORREL) < compareHist(histOfRegion, f2->hist, CV_COMP_CORREL);
     };
 
     sort(playersInOldRegion.begin(), playersInOldRegion.end(), sortingFunction);
+    newRegion->playerInRegion = playersInOldRegion[0];
 
-    newRegion->playerIds.emplace_back(string(playersInOldRegion[0].identifier));
 #ifdef DEBUG
-    fprintf(debugData, "Put %s into new Region, Rest out of sight.\n", playersInOldRegion[0].identifier.c_str());
+    fprintf(debugData, "Put %s into new Region, Rest out of sight.\n", playersInOldRegion[0]->identifier.c_str());
 #endif
 
     // Mark all the other Players and Regions as out of sight.
     bool markAsLost;
-    for(int oldRegionIndex = 0 ; oldRegionIndex < num; ++oldRegionIndex){
-
-        markAsLost = true;
-        for(auto playerID: regionLastFrame[oldRegionIndex].playerIds){
-            markAsLost &= playerID != newRegion->playerIds[0];
+    int oldRegionIndex;
+    Region  & oldRegion = regionLastFrame[0];
+    for(int i = 0; i < num; ++i){
+        oldRegionIndex = regions[i];
+        oldRegion = regionLastFrame[oldRegionIndex];
+        if(oldRegion.playerInRegion != newRegion->playerInRegion){ // Mark as out of sight
+            outOfSightRegions.emplace_back(regionLastFrame[oldRegionIndex]);
         }
-
-        if(markAsLost){
-            outOfSightRegions.push_back(regionLastFrame[oldRegionIndex]);
-        }
-
     }
 }
 
@@ -499,11 +502,11 @@ void RegionTracker::handleContinuation(int regionIndexOld, int regionIndexNew) {
     }
      */
 #ifdef DEBUG
-    fprintf(debugData, "Region %i. Continue as Region %i with Player %s. \n", regionIndexOld, regionIndexNew, oldRegion.playerIds[0].c_str());
+    fprintf(debugData, "Region %i. Continue as Region %i with Player %s. \n", regionIndexOld, regionIndexNew, oldRegion.playerInRegion->identifier.c_str());
 #endif
-    for(string playerIDsLastFrame : oldRegion.playerIds){
-        newRegion.playerIds.emplace_back(string(oldRegion.playerIds.back()));
-    }
+
+    newRegion.playerInRegion = oldRegion.playerInRegion;
+
     //newRegion.updateObjectsInRegion(currentFrame);
 }
 
@@ -541,7 +544,7 @@ void RegionTracker::detectOnFrame(Mat frame, vector<Rect> &detected) {
 void RegionTracker::drawOnFrame(Mat frame) {
     for (Region & r: regionsNewFrame){
         string id;
-        for(string player : r.playerIds) id += " " + player;
+        id = r.playerInRegion->identifier;
 
         textAboveRect(frame, r.coordinates, id);
         rectangle(frame, r.coordinates, Scalar(0, 0, 255), 2);
@@ -623,7 +626,7 @@ void RegionTracker::workOnFile(char *filename) {
 
         for(Region region : regionsNewFrame){
 
-         CV_Assert(region.playerIds.size() > 0);
+         CV_Assert(region.playerInRegion->identifier.size() > 0);
          ++counter;
      }
 
@@ -654,12 +657,18 @@ void RegionTracker::workOnFile(char *filename) {
  ********************************************/
 
 FootballPlayer RegionTracker::playerById(string id) {
-    for(FootballPlayer player: footballPlayers){
-        if (id == player.identifier){
-            return player;
+    for(FootballPlayer * player: footballPlayers){
+        if (id == player->identifier){
+            return *player;
         }
     }
     return FootballPlayer(Rect(), 0, "");
+}
+
+RegionTracker::~RegionTracker() {
+    for(FootballPlayer * footballPlayer : footballPlayers){
+        delete footballPlayer;
+    }
 }
 
 
@@ -691,9 +700,9 @@ void Region::updateObjectsInRegion(int frameNum) {
 }
 
 
-Region::Region(const Rect &coordinates, string playerID) {
+Region::Region(const Rect &coordinates, FootballPlayer *  ptrPlayer) {
     this->coordinates = coordinates;
-    this->playerIds.push_back(playerID);
+    playerInRegion = ptrPlayer;
 }
 
 Region::Region(Rect coordinates) {

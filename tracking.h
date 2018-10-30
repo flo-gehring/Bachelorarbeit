@@ -50,12 +50,14 @@ public:
 
 class Region{
 public:
-    Region(const Rect &coordinates,  string playerID);
+    Region(const Rect &coordinates,  FootballPlayer * ptrPlayer);
     Region(Rect coordinates);
 
     Rect coordinates;
     // vector<FootballPlayer *> playersInRegion;
-    vector<string> playerIds;
+    // vector<string> playerIds;
+
+    FootballPlayer * playerInRegion;
 
     static bool regionsIntersect(const Region & r1, const Region & r2);
     static bool regionsInRelativeProximity(Region const & r1, Region const &r2, int framesPassed);
@@ -68,6 +70,8 @@ public:
     bool update(Mat frame);
 
     void workOnFile(char * filename);
+
+    virtual ~RegionTracker();
 
 protected:
     /*
@@ -118,7 +122,7 @@ protected:
     vector<Region> regionsNewFrame;
     vector<Region> regionLastFrame;
 
-    vector<FootballPlayer> footballPlayers;
+    vector<FootballPlayer *> footballPlayers;
 
     MatDetector darknetDetector;
 
