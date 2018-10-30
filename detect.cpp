@@ -68,7 +68,7 @@ void MatDetector::detect_and_display(cv::Mat input_mat){
     float *X = letterbox.data;
     double time = what_time_is_it_now();
     network_predict(net, X);
-    printf("%s: Predicted in %f seconds.\n", "Mat", what_time_is_it_now()-time);
+    // printf("%s: Predicted in %f seconds.\n", "Mat", what_time_is_it_now()-time);
 
 
     //    remember_network(net);

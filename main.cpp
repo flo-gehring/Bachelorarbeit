@@ -45,7 +45,7 @@ int main(int argc, char *argv[]) {
 
     VideoCapture vc(video_path);
 
-    MatDetector matDetector;
+    // MatDetector matDetector;
 
     string trackers[] = {
             //"GOTURN",
@@ -60,15 +60,16 @@ int main(int argc, char *argv[]) {
     int numTrackers = sizeof(trackers) / sizeof(string);
     string tracker;
 
-
+/*
     for(int i = 0; i < numTrackers; ++i) {
         tracker = trackers[i];
         tracker.append("_fps.mp4");
         cout << "Beginn tracking with "<< tracker << endl;
         trackVideo(video_path, tracker , trackers[i], matDetector);
     }
-    // RegionTracker rt;
-    // rt.workOnFile(video_path);
+    */
+     RegionTracker rt;
+     rt.workOnFile(video_path);
 
 
 /*

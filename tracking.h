@@ -19,6 +19,7 @@
 #include <cstring>
 #include <ctime>
 #include <numeric>
+#include <stdio.h>
 
 #include "cubetransform.h"
 
@@ -124,6 +125,9 @@ protected:
     int objectCounter = 0;
     int currentFrame = 0;
     Mat matCurrentFrame;
+
+    FILE * roiData;
+    FILE * debugData;
 
 
 };

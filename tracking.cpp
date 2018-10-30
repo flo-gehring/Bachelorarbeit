@@ -7,6 +7,18 @@
 #ifndef DEBUG
 #define DEBUG
 #endif
+
+
+// TODO: Change so that every Region only has one Player (<-> Distinction between Region and Player Reasonable? I guess yes!)
+
+// TODO: Save Information about every Player in their Objects
+
+// TODO: Better Method than to get the Object by their String id? Reference or something
+
+// TODO: Velocity information for better prediction
+
+// TODO Save Information about Regions and so on in File
+
 void printMatrix(unsigned  short mat[][22]){
     int rowsToPrint = 13;
 
@@ -30,6 +42,10 @@ void printMatrix(unsigned  short mat[][22]){
 
 }
 int RegionTracker::initialize(Mat frame) {
+
+    roiData = fopen("roidata.txt", "w");
+    debugData = fopen("debugdata.txt", "w");
+
     currentFrame = 0;
     matCurrentFrame = frame;
     vector<Rect> detectedRects;
@@ -91,7 +107,7 @@ bool RegionTracker::update(Mat frame) {
  */
 void RegionTracker::calcMatrix() {
 
-    if(regionsNewFrame.size() == 0){
+    if(regionsNewFrame.empty()){
 #ifdef DEBUG
       cout << "Not a single Region found!" << endl;
 #endif
@@ -146,7 +162,7 @@ void RegionTracker::calcMatrix() {
     // it overlaps greatly, thats a case for splitting. Iterate matrix
 
     int associationCounter = 0;
-
+#ifdef UNDEF
 
     for(int col = 0; col < regionsNewFrame.size(); ++col){
         associationCounter = 0;
@@ -165,6 +181,7 @@ void RegionTracker::calcMatrix() {
             }
         }
     }
+#endif
 
 
 }
@@ -270,14 +287,19 @@ void RegionTracker::handleAppearance(int regionIndex) {
     Region & newRegion = regionsNewFrame[regionIndex];
     for (auto region = outOfSightRegions.begin(); region != outOfSightRegions.end(); ++region){
 
-        if(Region::regionsIntersect(* region, regionsNewFrame[regionIndex])){
+        if(Region::regionsInRelativeProximity(* region, regionsNewFrame[regionIndex], 5)){ // TODO: Frame count
+
             // TODO: Perform Additional Checking and such. This is very basic and probably not useful
 #ifdef DEBUG
             printf("Region %i appeared and was identified to be an old Region.\n", regionIndex);
+
+
+            fprintf(debugData, "Region %i:  Appeared and was identified to be an old Region.\n It now contains Player %s. \n", regionIndex, region->playerIds[0].c_str());
 #endif
             region->coordinates = newRegion.coordinates;
             region->updateObjectsInRegion(currentFrame);
             regionsNewFrame[regionIndex] = *region;
+
             outOfSightRegions.erase(region);
 
             return;
@@ -290,6 +312,7 @@ void RegionTracker::handleAppearance(int regionIndex) {
     // Calculate Histogramm
     histFromRect(matCurrentFrame, newRegion.coordinates, footballPlayers.back().hist);
 #ifdef DEBUG
+    fprintf(debugData, "Region %i: Appeared and is a new Region.  It now contains NEW Player %s. \n", regionIndex, to_string(objectCounter).c_str());
     printf("Region %i appeared and was identified to be new Region. \n", regionIndex);
 #endif
 
@@ -299,6 +322,8 @@ void RegionTracker::handleAppearance(int regionIndex) {
 void RegionTracker::handleDisapearance(int regionIndex) {
 #ifdef DEBUG
     printf("Region %i disappears.\n", regionIndex);
+    fprintf(debugData, "Region %i: \n Disappears. It did contain Player %s",
+            regionIndex, regionLastFrame[regionIndex].playerIds[0].c_str());
 #endif
 
     outOfSightRegions.push_back(regionLastFrame[regionIndex]);
@@ -317,6 +342,7 @@ void RegionTracker::handleSplitting(int regionIndex, int *splitInto, int num) {
     for (int i= 0; i < num; ++i) s += " " + to_string(splitInto[i]) +",";
     const char * s_char = s.c_str();
     printf("Splitting Region %i into %s. \n", regionIndex, s_char);
+    fprintf(debugData, "Splitting Region %i into %s. \n", regionIndex, s_char);
 #endif
 
     vector<Region *> splitRegions;
@@ -346,6 +372,9 @@ void RegionTracker::handleSplitting(int regionIndex, int *splitInto, int num) {
         std::sort(splitRegions.begin(), splitRegions.end(), sortingFunction);
 
         splitRegions.front()->playerIds.push_back(player.identifier);
+#ifdef DEBUG
+        fprintf(debugData, "Player %s from the old Region was assigned to a new Region\n", player.identifier.c_str());
+#endif
 
     }
 
@@ -372,7 +401,11 @@ void RegionTracker::handleSplitting(int regionIndex, int *splitInto, int num) {
                 if(regionsIntersect  && histogrammsSimmiliar){
                     for(string const & playerID: outofsight->playerIds){
                         region->playerIds.emplace_back(string(playerID));
+#ifdef DEBUG
+                        fprintf(debugData, "Player %s which was out of sight was assigned to a Region emerging from the split \n", playerID.c_str());
+#endif
                     }
+
                     outOfSightRegions.erase(outofsight);
                     break; // Break inner loop
                 }
@@ -384,6 +417,9 @@ void RegionTracker::handleSplitting(int regionIndex, int *splitInto, int num) {
                 footballPlayers.emplace_back(FootballPlayer(region->coordinates,currentFrame, string(to_string(objectCounter))));
                 histFromRect(matCurrentFrame, region->coordinates, footballPlayers.back().hist);
                 region->playerIds.emplace_back(string(to_string(objectCounter)));
+#ifdef DEBUG
+                fprintf(debugData, "New Player %s created! \n", to_string(objectCounter).c_str());
+#endif
             }
 
         }
@@ -391,7 +427,8 @@ void RegionTracker::handleSplitting(int regionIndex, int *splitInto, int num) {
 }
 
 /*
- * Throw stuff together in one region.
+ * Handle the "merging" of two Regions.
+ * The new Region will only have one player in it, the rest will be marked as out of sight.
  */
 void RegionTracker::handleMerging(int *regions, int num, int mergeInto) {
 
@@ -400,6 +437,7 @@ void RegionTracker::handleMerging(int *regions, int num, int mergeInto) {
     for (int i= 0; i < num; ++i) s += " " + to_string(regions[i]) +",";
     const char * s_char = s.c_str();
     printf("Merging Regions%s into %i. \n", s_char, mergeInto);
+    fprintf(debugData, "Region%i, Merging Regions%s into %i. \n",mergeInto, s_char, mergeInto);
 #endif
 
     Region * newRegion = &regionsNewFrame[mergeInto];
@@ -408,14 +446,45 @@ void RegionTracker::handleMerging(int *regions, int num, int mergeInto) {
         oldRegions.push_back(&regionLastFrame[*(regions + i)]);
     }
 
-    // Insert all the tracked Objects into the new Region
+    vector<FootballPlayer> playersInOldRegion;
+
     for(auto r = oldRegions.begin(); r != oldRegions.end(); ++r ){
         for (auto n = (*r)->playerIds.begin(); n != (*r)->playerIds.end(); ++n){
-            newRegion->playerIds.emplace_back(string(*n));
+            playersInOldRegion.push_back( playerById(*n));
         }
 
     }
+    Mat histOfRegion;
+    histFromRect(matCurrentFrame, newRegion->coordinates, histOfRegion);
 
+
+    // Get the Best Guess as ID for the new region
+    auto sortingFunction = [histOfRegion](FootballPlayer f1, FootballPlayer f2){
+
+        return compareHist(histOfRegion, f1.hist, CV_COMP_CORREL) < compareHist(histOfRegion, f2.hist, CV_COMP_CORREL);
+    };
+
+    sort(playersInOldRegion.begin(), playersInOldRegion.end(), sortingFunction);
+
+    newRegion->playerIds.emplace_back(string(playersInOldRegion[0].identifier));
+#ifdef DEBUG
+    fprintf(debugData, "Put %s into new Region, Rest out of sight.\n", playersInOldRegion[0].identifier.c_str());
+#endif
+
+    // Mark all the other Players and Regions as out of sight.
+    bool markAsLost;
+    for(int oldRegionIndex = 0 ; oldRegionIndex < num; ++oldRegionIndex){
+
+        markAsLost = true;
+        for(auto playerID: regionLastFrame[oldRegionIndex].playerIds){
+            markAsLost &= playerID != newRegion->playerIds[0];
+        }
+
+        if(markAsLost){
+            outOfSightRegions.push_back(regionLastFrame[oldRegionIndex]);
+        }
+
+    }
 }
 
 /*
@@ -430,7 +499,7 @@ void RegionTracker::handleContinuation(int regionIndexOld, int regionIndexNew) {
     }
      */
 #ifdef DEBUG
-    printf("Continue Region %i to %i.\n", regionIndexOld, regionIndexNew);
+    fprintf(debugData, "Region %i. Continue as Region %i with Player %s. \n", regionIndexOld, regionIndexNew, oldRegion.playerIds[0].c_str());
 #endif
     for(string playerIDsLastFrame : oldRegion.playerIds){
         newRegion.playerIds.emplace_back(string(oldRegion.playerIds.back()));
@@ -486,8 +555,6 @@ void RegionTracker::workOnFile(char *filename) {
 
 
 
-    const char * windowName = "Occlusion Tracker";
-    namedWindow(windowName);
 
     if(! video.isOpened()){
         cerr << "Could not open file";
@@ -499,33 +566,80 @@ void RegionTracker::workOnFile(char *filename) {
         cerr << "Empty video";
         exit(-1);
     }
-#ifdef DEBUG
-    int numSkipFrames = 93;
+
+    #ifdef DEBUG
+    int numSkipFrames = 0;
     for(int fc = 0; fc < numSkipFrames; ++fc){
         video >> frame;
     }
 #endif
+
+
     initialize(frame);
-    drawOnFrame(frame);
+#ifdef SHOW
+    const char * windowName = "Occlusion Tracker";
+    namedWindow(windowName);
     resize(frame, resizedFrame, Size(1980, 1020));
     imshow(windowName, resizedFrame);
-    waitKey(30);
+#else
+    VideoWriter vw("darknetTracker.mp4", VideoWriter::fourcc('M', 'J', 'P', 'G'),
+                   video.get(CAP_PROP_FPS),
+                   frame.size(), true);
+#endif
+
+    drawOnFrame(frame);
+
+
+
+    time_t timeStart = time(0);
+    float avgFrameRate = 0;
+    float secondsPassed;
+    int frameCounter = 0;
+
     video >> frame;
+
+
     while(! frame.empty()){
+#ifdef DEBUG
+    fprintf(debugData, "----------------------\n");
+    fprintf(debugData, "Frame %i: \n", frameCounter+1);
+#endif
      update(frame);
 
      int counter = 0;
-     for(Region region : regionsNewFrame){
+        cout << "Updated Frame " << frameCounter << endl;
+        ++frameCounter;
+
+        secondsPassed = (time(0) - timeStart);
+
+        if(secondsPassed != 0){
+            avgFrameRate = float(frameCounter) / secondsPassed;
+        }
+
+        putText(frame,"FPS: " + to_string(avgFrameRate), Point(0,50), FONT_HERSHEY_PLAIN, 4, Scalar(0,0,255), 2);
+
+        putText(frame, "Tracker: Darknet" , Point(0, 100), FONT_HERSHEY_PLAIN, 4, Scalar(0,0,255), 2);
+        putText(frame, "Frame No." + to_string(frameCounter), Point(0, 150), FONT_HERSHEY_PLAIN, 4, Scalar(0,0,255), 2);
+
+        for(Region region : regionsNewFrame){
 
          CV_Assert(region.playerIds.size() > 0);
          ++counter;
      }
 
      drawOnFrame(frame);
-
+#ifdef SHOW
      resize(frame, resizedFrame, Size(1980, 1020));
      imshow(windowName, resizedFrame);
-     waitKey(30);
+     char c = waitKey(30);
+     bool pauseVid = c == 32; // Space
+     while(pauseVid){
+         c = waitKey(10);
+         pauseVid = c == 32;
+     }
+#else
+     vw.write(frame);
+#endif
 
      video >> frame;
 
@@ -624,6 +738,7 @@ void textAboveRect(Mat frame, Rect rect, string text) {
     y = rect.y;
 
     y -= 5; // Shift the text above the rect
+    x -= 5;
     putText(frame,text, Point(x,y), FONT_HERSHEY_PLAIN, 3, Scalar(0,0,255), 2);
 
 }
