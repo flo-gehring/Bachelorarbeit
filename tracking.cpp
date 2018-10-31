@@ -10,10 +10,8 @@
 #define SHOW
 
 
-// TODO: Change so that every Region only has one Player (<-> Distinction between Region and Player Reasonable? I guess yes!)
 
 // TODO: Save Information about every Player in their Objects
-
 
 // TODO: Velocity information for better prediction
 
@@ -571,7 +569,7 @@ void RegionTracker::workOnFile(char *filename) {
     }
 
     #ifdef DEBUG
-    int numSkipFrames = 0;
+    int numSkipFrames = 129;
     for(int fc = 0; fc < numSkipFrames; ++fc){
         video >> frame;
     }
@@ -609,26 +607,31 @@ void RegionTracker::workOnFile(char *filename) {
 #endif
      update(frame);
 
+     vector<MetaRegion> mr = calcMetaRegions();
+     for(MetaRegion const & metaRegion : mr){
+         rectangle(frame, metaRegion.area, Scalar(255, 0, 0), 2);
+     }
+
      int counter = 0;
-        cout << "Updated Frame " << frameCounter << endl;
-        ++frameCounter;
+     cout << "Updated Frame " << frameCounter << endl;
+     ++frameCounter;
 
-        secondsPassed = (time(0) - timeStart);
+     secondsPassed = (time(0) - timeStart);
 
-        if(secondsPassed != 0){
-            avgFrameRate = float(frameCounter) / secondsPassed;
-        }
+    if(secondsPassed != 0){
+        avgFrameRate = float(frameCounter) / secondsPassed;
+    }
 
-        putText(frame,"FPS: " + to_string(avgFrameRate), Point(0,50), FONT_HERSHEY_PLAIN, 4, Scalar(0,0,255), 2);
+    putText(frame,"FPS: " + to_string(avgFrameRate), Point(0,50), FONT_HERSHEY_PLAIN, 4, Scalar(0,0,255), 2);
 
-        putText(frame, "Tracker: Darknet" , Point(0, 100), FONT_HERSHEY_PLAIN, 4, Scalar(0,0,255), 2);
-        putText(frame, "Frame No." + to_string(frameCounter), Point(0, 150), FONT_HERSHEY_PLAIN, 4, Scalar(0,0,255), 2);
+    putText(frame, "Tracker: Darknet" , Point(0, 100), FONT_HERSHEY_PLAIN, 4, Scalar(0,0,255), 2);
+    putText(frame, "Frame No." + to_string(frameCounter), Point(0, 150), FONT_HERSHEY_PLAIN, 4, Scalar(0,0,255), 2);
 
-        for(Region region : regionsNewFrame){
+    for(Region region : regionsNewFrame){
 
          CV_Assert(region.playerInRegion->identifier.size() > 0);
          ++counter;
-     }
+    }
 
      drawOnFrame(frame);
 #ifdef SHOW
@@ -669,6 +672,108 @@ RegionTracker::~RegionTracker() {
     for(FootballPlayer * footballPlayer : footballPlayers){
         delete footballPlayer;
     }
+}
+
+
+/*
+ * Helper Function:
+ * Iterates Vector and puts matching Regions into the Meta Region.
+ * Returns if the area has changed (For now this is iff a region was added).
+ */
+bool helperRegionsInMeta(MetaRegion & mr, vector<Region> & vectorOfRegions){
+
+    bool areaUnchanged = true;
+    Rect commonArea;
+    bool regionInMeta = false;
+
+    auto search = [](MetaRegion & mr, Region & r){
+
+        for(Region * r_ptr: mr.metaOldRegions) if(r_ptr == &r) return true;
+        for(Region * r_ptr: mr.metaNewRegions) if(r_ptr == &r) return true;
+        return false;
+    };
+    for(Region & region : vectorOfRegions){
+        commonArea = region.coordinates & mr.area;
+
+        regionInMeta = search(mr, region);
+
+        if(commonArea.area() > 0 && ! regionInMeta ){
+
+            areaUnchanged = false;
+            mr.area |= region.coordinates;
+            mr.metaOldRegions.push_back(&region);
+
+        }
+    }
+    return areaUnchanged;
+}
+
+vector<MetaRegion> RegionTracker::calcMetaRegions() {
+
+    vector<int> indicesUnhandledRegions(regionsNewFrame.size());
+    std::iota(std::begin(indicesUnhandledRegions),std::end(indicesUnhandledRegions), 0);
+
+    Region * currentRegion;
+    Region * regionToCompare;
+    bool areaUnchanged = false;
+
+    vector<MetaRegion> metaRegions;
+
+
+    while(! indicesUnhandledRegions.empty()){
+
+        // Create a new Meta Region, with an arbitrary available Region from the new Frame
+        currentRegion = &regionsNewFrame[indicesUnhandledRegions.back()];
+
+        indicesUnhandledRegions.pop_back();
+
+        metaRegions.emplace_back(MetaRegion());
+
+        MetaRegion & currentMetaRegion = metaRegions.back();
+        currentMetaRegion.area = Rect(currentRegion->coordinates);
+        currentMetaRegion.metaNewRegions.push_back(currentRegion);
+
+        areaUnchanged = false;
+
+        // Iterate through old, new and out of sight regions to get the Meta Region
+        while(!areaUnchanged){
+
+            areaUnchanged = true;
+
+            for(auto newRegionIndex = indicesUnhandledRegions.begin();
+            newRegionIndex != indicesUnhandledRegions.end(); /*Do nothing */){
+
+                regionToCompare = &regionsNewFrame[*newRegionIndex];
+
+                // A new Region from the current Frame for the Meta Region
+                if((regionToCompare->coordinates & currentMetaRegion.area).area() > 0){
+
+                    areaUnchanged = false;
+
+                    currentMetaRegion.area |= currentRegion->coordinates;
+                    currentMetaRegion.metaNewRegions.push_back(& regionsNewFrame[* newRegionIndex]);
+
+                    indicesUnhandledRegions.erase(newRegionIndex);
+
+                }
+                else{ // Only increase iterator if no Element was deleted.
+                    ++newRegionIndex;
+                }
+            }
+
+            areaUnchanged &= helperRegionsInMeta(currentMetaRegion, regionLastFrame);
+            areaUnchanged &= helperRegionsInMeta(currentMetaRegion, outOfSightRegions);
+
+        }
+
+
+    }
+
+    return metaRegions;
+}
+
+void RegionTracker::interpretMetaRegions(vector<MetaRegion> &mr) {
+
 }
 
 

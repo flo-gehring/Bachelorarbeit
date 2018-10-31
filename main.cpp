@@ -33,6 +33,7 @@ int main(int argc, char *argv[]) {
 
 
 
+
     if (!(argc == 6 || argc == 7))
     {
         cout << "Wrong number of parameters." << endl;

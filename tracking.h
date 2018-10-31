@@ -27,6 +27,8 @@ using namespace std;
 using namespace cv;
 
 
+
+
 class FootballPlayer {
 public:
     FootballPlayer(Rect coordinate, int frame, string identifier);
@@ -48,20 +50,27 @@ public:
     Mat hist; // Histogramm of the Player
 };
 
+
 class Region{
 public:
     Region(const Rect &coordinates,  FootballPlayer * ptrPlayer);
     Region(Rect coordinates);
 
     Rect coordinates;
-    // vector<FootballPlayer *> playersInRegion;
-    // vector<string> playerIds;
 
     FootballPlayer * playerInRegion;
 
     static bool regionsIntersect(const Region & r1, const Region & r2);
     static bool regionsInRelativeProximity(Region const & r1, Region const &r2, int framesPassed);
     void updateObjectsInRegion(int frameNum);
+};
+
+
+class MetaRegion{
+public:
+    Rect area;
+    vector<Region *> metaOldRegions;
+    vector<Region *> metaNewRegions;
 };
 
 class RegionTracker{
@@ -74,6 +83,11 @@ public:
     virtual ~RegionTracker();
 
 protected:
+
+    vector<MetaRegion> calcMetaRegions();
+    void interpretMetaRegions(vector<MetaRegion> & mr);
+
+
     /*
      * Calculates a Matrix as described in the Paper from regionsNewFrame and regionsLastFrame.
      */
