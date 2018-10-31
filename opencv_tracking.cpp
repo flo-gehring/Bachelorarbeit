@@ -17,9 +17,6 @@ void trackVideo(char *videoPath, string const &  outFile,  string  const & track
 
     VideoCapture videoCapture(videoPath);
 
-
-
-
     Rect coordinatesOnPanorama;
     MultiTracker multiTracker;
     // Get the objects

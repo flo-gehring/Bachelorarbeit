@@ -55,6 +55,8 @@ int RegionTracker::initialize(Mat frame) {
 
     objectCounter = 0;
 
+    darknetDetector = DetectionFromFile();
+
     for(auto it = detectedRects.begin(); it != detectedRects.end(); ++it){
 
         footballPlayers.emplace_back(FootballPlayer((*it), 1, to_string(objectCounter)));

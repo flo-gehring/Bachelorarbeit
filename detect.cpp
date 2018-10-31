@@ -6,6 +6,10 @@
 #include <string.h>
 #include <opencv2/dnn.hpp>
 #include <vector>
+
+#include <fstream>
+
+#define OUTFILE
 MatDetector::MatDetector(){
 
     fps = 0;
@@ -16,10 +20,6 @@ MatDetector::MatDetector(){
     demo_index = 0;
     demo_done = 0;
     demo_total = 0;
-
-
-
-
 
     cfgfile = "/home/flo/Workspace/darknet/cfg/yolov3.cfg";
     weightfile = "/home/flo/Workspace/darknet/yolov3.weights";
@@ -34,8 +34,6 @@ MatDetector::MatDetector(){
     char *name_list = option_find_str(options, "names", "/home/flo/Workspace/darknet/names.list");
     char **names = get_labels(name_list);
 
-
-
     predictions = reinterpret_cast<float**>(calloc(1, sizeof(float*)));
     predictions[0] = reinterpret_cast<float*>(calloc(size_network(net), sizeof(float)));
     avg = reinterpret_cast<float *>(calloc(size_network(net), sizeof(float)));
@@ -45,6 +43,10 @@ MatDetector::MatDetector(){
     demo_classes = classes;
     demo_thresh = thresh;
     demo_hier = hier;
+
+    fs = std::fstream("aoi_out.date", std::fstream::out);
+
+
 
 
 
@@ -87,8 +89,18 @@ void MatDetector::detect_and_display(cv::Mat input_mat){
     image display = darknet_image;
     // draw_detections(display, dets, nboxes, demo_thresh, demo_names, demo_alphabet, demo_classes);
     print_detections(display, dets, nboxes);
+
+#ifdef OUTFILE
+    std::string line;
+    for(AbsoluteBoundingBoxes box : found){
+        cv::Rect r = box.rect;
+        line += std::to_string(r.x) + " " + std::to_string(r.y)+  " " + std::to_string(r.width)+  " " + std::to_string(r.height )+ " ";
+    }
+    fs << line << std::endl;
+
+#endif
     free_detections(dets, nboxes);
-    free_image(darknet_image); // Free images against memory leakage
+    free_image(darknet_image);
     free_image(letterbox);
 
 
@@ -176,6 +188,9 @@ void  MatDetector::print_detections(image im, detection *dets, int num){
 
             bboxes.push_back(cv::Rect(cv::Point(left, top),
                     cv::Point(right, bot)));
+
+
+
             scores.push_back(prob);
 
         }
@@ -196,6 +211,8 @@ void  MatDetector::print_detections(image im, detection *dets, int num){
         found.back().class_name = "KONSTANT PERSON";
         found.back().prob = scores[*it];
     }
+
+
 }
 
 void MatDetector::remember_network(network *net)
@@ -209,6 +226,10 @@ void MatDetector::remember_network(network *net)
             count += l.outputs;
         }
     }
+}
+
+MatDetector::MatDetector(bool) {
+
 }
 
 
@@ -231,3 +252,71 @@ image ipl_to_image(IplImage* src)
     }
     return im;
 }
+
+
+
+
+void DetectionFromFile::detect_and_display(cv::Mat inputMat) {
+
+    found.clear();
+    for(cv::Rect r : boundingBoxes[frameCounter]){
+
+        found.emplace_back(AbsoluteBoundingBoxes());
+        found.back().rect = cv::Rect(r);
+        found.back().prob = 0.9;
+        found.back().class_name = "asdf";
+
+    }
+    ++frameCounter;
+
+
+}
+
+DetectionFromFile::DetectionFromFile() : MatDetector(false){ // Not the Default Constuctor because we dont want to load the YOLO Config.
+
+    inFile = std::fstream("aoi_from_vid.data", std::fstream::in);
+
+    if(! inFile.is_open()) exit(8);
+
+    int buffSize = 256;
+    int x,y,width,height;
+    char buff[buffSize];
+    std::string line;
+
+
+
+    int lineCounter = 0;
+    std::stringstream lineStream;
+    do{
+        inFile.getline(buff, buffSize);
+        line = std::string(buff);
+
+        lineStream << line;
+        boundingBoxes.emplace_back(std::vector<cv::Rect>());
+
+        if(line.empty()) continue;
+
+        while(lineStream.good()){
+
+            // line += std::to_string(r.x) + " " + std::to_string(r.y)+  " " + std::to_string(r.width)+  " " + std::to_string(r.height )+ " ";
+            lineStream >> x;
+            bool lsgood = lineStream.good();
+            if(!lsgood) break;
+            lineStream >> y;
+            lineStream >> width;
+            lineStream >> height;
+
+            boundingBoxes.back().emplace_back(cv::Rect(x, y, width, height));
+        }
+        lineStream.clear();
+
+    }while (inFile.good());
+
+
+    frameCounter = 0;
+
+
+
+}
+
+
