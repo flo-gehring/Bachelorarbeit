@@ -138,7 +138,7 @@ protected:
 
     vector<FootballPlayer *> footballPlayers;
 
-    MatDetector darknetDetector;
+    DetectionFromFile darknetDetector;
 
     int objectCounter = 0;
     int currentFrame = 0;

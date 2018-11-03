@@ -54,6 +54,9 @@ int RegionTracker::initialize(Mat frame) {
     objectCounter = 0;
 
     FootballPlayer * newPlayer;
+    darknetDetector = DetectionFromFile();
+
+
     for(auto it = detectedRects.begin(); it != detectedRects.end(); ++it){
 
         newPlayer = new FootballPlayer((*it), 1, to_string(objectCounter));

@@ -10,6 +10,7 @@
 #include <iomanip>  // for controlling float print precision
 #include <sstream>  // string to number conversion
 #include <math.h>
+#include <fstream>
 
 #include <opencv2/opencv.hpp>
 #include <opencv2/core.hpp>     // Basic OpenCV structures (cv::Mat, Scalar)
@@ -25,6 +26,7 @@
 #ifndef OPENCV
 #define OPENCV
 #endif
+#define SHOW
 
 #include "/home/flo/Workspace/darknet/include/darknet.h"
 
@@ -86,7 +88,7 @@ int demo_total;
 double demo_time;
 
 
-void detect_and_display(cv::Mat input_mat);
+virtual void detect_and_display(cv::Mat input_mat);
 void *detect_in_thread(void *ptr);
 void remember_network(network *net);
 
@@ -94,6 +96,30 @@ detection *avg_predictions(network *net, int *nboxes);
 
 void print_detections(image im, detection *dets, int num);
 
+protected:
+std::fstream fs;
+MatDetector(bool);
+
+
 };
+
+class DetectionFromFile : public MatDetector{
+
+public:
+    DetectionFromFile();
+
+    void detect_and_display(cv::Mat inputMat) override;
+    std::vector<AbsoluteBoundingBoxes> found;
+
+
+
+
+private:
+    std::fstream inFile;
+    int frameCounter;
+    std::vector<std::vector<cv::Rect>> boundingBoxes;
+
+};
+
 
 #endif //PANORAMA2CUBEMAP_DETECT_H
