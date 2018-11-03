@@ -62,7 +62,7 @@ public:
 
     static bool regionsIntersect(const Region & r1, const Region & r2);
     static bool regionsInRelativeProximity(Region const & r1, Region const &r2, int framesPassed);
-    void updateObjectsInRegion(int frameNum);
+    void updateObjectsInRegion(const Region * oldRegion, int frameNum);
 };
 
 
@@ -71,6 +71,8 @@ public:
     Rect area;
     vector<Region *> metaOldRegions;
     vector<Region *> metaNewRegions;
+    void matchOldAndNewRegions(Mat const & frame, int * matching);
+
 };
 
 class RegionTracker{
