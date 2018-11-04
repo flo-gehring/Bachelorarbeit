@@ -20,6 +20,7 @@
 #include <ctime>
 #include <numeric>
 #include <stdio.h>
+#include <unordered_set>
 
 #include "cubetransform.h"
 
@@ -148,6 +149,7 @@ protected:
 
     FILE * roiData;
     FILE * debugData;
+
 
 
 };

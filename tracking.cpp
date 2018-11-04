@@ -63,7 +63,7 @@ int RegionTracker::initialize(Mat frame) {
         regionsNewFrame.emplace_back(Region(*it,  footballPlayers.back()));
         footballPlayers.back()->coordinates.push_back((*it));
 
-        histFromRect(frame, (*it), footballPlayers.back()->hist);
+        histFromRect(frame, (*it), newPlayer->hist);
         objectCounter++;
 
     }
@@ -96,9 +96,14 @@ bool RegionTracker::update(Mat frame) {
         }
     }
 
+    vector<MetaRegion> vectorMetaRegion = calcMetaRegions();
+    interpretMetaRegions(vectorMetaRegion);
+
+    /*
     calcMatrix();
 
     interpretMatrix();
+     */
 
     return false;
 }
@@ -550,11 +555,9 @@ void RegionTracker::drawOnFrame(Mat frame) {
 }
 
 void RegionTracker::workOnFile(char *filename) {
+
     VideoCapture video(filename);
     Mat frame, resizedFrame;
-
-
-
 
     if(! video.isOpened()){
         cerr << "Could not open file";
@@ -566,14 +569,6 @@ void RegionTracker::workOnFile(char *filename) {
         cerr << "Empty video";
         exit(-1);
     }
-
-    #ifdef UNDEF
-    int numSkipFrames = 129;
-    for(int fc = 0; fc < numSkipFrames; ++fc){
-        video >> frame;
-    }
-#endif
-
 
     initialize(frame);
 #ifdef SHOW
@@ -589,8 +584,6 @@ void RegionTracker::workOnFile(char *filename) {
 
     drawOnFrame(frame);
 
-
-
     time_t timeStart = time(0);
     float avgFrameRate = 0;
     float secondsPassed;
@@ -605,12 +598,14 @@ void RegionTracker::workOnFile(char *filename) {
         fprintf(debugData, "Frame %i: \n", frameCounter+1);
         printMatrix(matrix);
         #endif
+        cout << "Frame No.: "<< frameCounter << endl;
         update(frame);
 
-        vector<MetaRegion> mr = calcMetaRegions();
+        /* vector<MetaRegion> mr = calcMetaRegions();
         for(MetaRegion const & metaRegion : mr){
          rectangle(frame, metaRegion.area, Scalar(255, 0, 0), 2);
         }
+         */
 
          int counter = 0;
         #ifdef DEBUG
@@ -680,7 +675,7 @@ RegionTracker::~RegionTracker() {
  * Iterates Vector and puts matching Regions into the Meta Region.
  * Returns if the area has changed (For now this is iff a region was added).
  */
-bool helperRegionsInMeta(MetaRegion & mr, vector<Region> & vectorOfRegions){
+bool helperRegionsInMeta(MetaRegion & mr, vector<Region> & vectorOfRegions, unordered_set<Region *> & regionFound){
 
     bool areaUnchanged = true;
     Rect commonArea;
@@ -703,11 +698,18 @@ bool helperRegionsInMeta(MetaRegion & mr, vector<Region> & vectorOfRegions){
             mr.area |= region.coordinates;
             mr.metaOldRegions.push_back(&region);
 
+            regionFound.insert(&region);
+
         }
     }
     return areaUnchanged;
 }
 
+
+/*
+ * Calcs the Meta Regions.
+ * TODO: Put all the Regions from the old frame which don't find a new MetaRegion to be into into outOfSight
+ */
 vector<MetaRegion> RegionTracker::calcMetaRegions() {
 
     vector<int> indicesUnhandledRegions(regionsNewFrame.size());
@@ -719,6 +721,9 @@ vector<MetaRegion> RegionTracker::calcMetaRegions() {
 
     vector<MetaRegion> metaRegions;
 
+    // A set in which every Region from the last frame is, which found an associated MetaRegion
+    unordered_set<Region *> associatedMRFound;
+    unordered_set<Region *> outOfSightFound; // Theres no need for this, but the function needs the argument
 
     while(! indicesUnhandledRegions.empty()){
 
@@ -761,14 +766,28 @@ vector<MetaRegion> RegionTracker::calcMetaRegions() {
                 }
             }
 
-            areaUnchanged &= helperRegionsInMeta(currentMetaRegion, regionLastFrame);
-            areaUnchanged &= helperRegionsInMeta(currentMetaRegion, outOfSightRegions);
+            areaUnchanged &= helperRegionsInMeta(currentMetaRegion, regionLastFrame, associatedMRFound);
+            areaUnchanged &= helperRegionsInMeta(currentMetaRegion, outOfSightRegions, outOfSightFound);
 
         }
 
 
     }
 
+    for(Region & region:regionLastFrame){
+        Region * r = & region;
+        if(associatedMRFound.count(r) == 0)
+            outOfSightRegions.emplace_back(region);
+    }
+
+    int tmp = 0;
+    for(MetaRegion const & mr : metaRegions) {
+        if(mr.metaNewRegions.size() != 1 || mr.metaOldRegions.size() != 1){
+            cout << "MetaReg " << tmp << endl;
+            cout << "size old: " << mr.metaOldRegions.size() << " size new: " << mr.metaNewRegions.size() << endl;
+        }
+        ++tmp;
+    }
     return metaRegions;
 }
 
@@ -868,6 +887,21 @@ void RegionTracker::interpretMetaRegions(vector<MetaRegion> & mr) {
         if(metaRegion.metaNewRegions.size() == 1 && metaRegion.metaOldRegions.size() == 1){
             metaRegion.metaNewRegions[0]->playerInRegion = metaRegion.metaOldRegions[0]->playerInRegion;
         }
+        else if(metaRegion.metaNewRegions.empty()){
+            for(Region * region: metaRegion.metaOldRegions){
+                outOfSightRegions.emplace_back(*region);
+            }
+        }
+        else if(metaRegion.metaOldRegions.empty()){
+            for(Region * region: metaRegion.metaNewRegions){
+                ++objectCounter;
+                FootballPlayer * fp = new FootballPlayer(Rect(region->coordinates), currentFrame,
+                                                         string(to_string(objectCounter)));
+                footballPlayers.push_back(fp);
+                region->playerInRegion = fp;
+                cout << "Create new Player " << to_string(objectCounter) << endl;
+            }
+        }
 
         else{
             int matching[metaRegion.metaOldRegions.size() * metaRegion.metaNewRegions.size()];
@@ -886,7 +920,21 @@ void RegionTracker::interpretMetaRegions(vector<MetaRegion> & mr) {
                 }
                 if(!newRegionMatched){
                     outOfSightRegions.push_back(*metaRegion.metaOldRegions[rowCounter]);
+                    cout << "Push out of sight region" << endl;
                 }
+            }
+        }
+        // If no matching old Region was found for a new Region, create a new Player.
+        for(Region * newRegion: metaRegion.metaNewRegions){
+            if(newRegion->playerInRegion == nullptr){
+                ++objectCounter;
+                FootballPlayer * fp = new FootballPlayer(newRegion->coordinates, currentFrame,
+                        string(to_string(objectCounter)));
+                footballPlayers.push_back(fp);
+                newRegion->playerInRegion = fp;
+                cout << "Create new Player " << to_string(objectCounter) << endl;
+
+
             }
         }
 
@@ -900,6 +948,7 @@ FootballPlayer::FootballPlayer(Rect coordinate, int frame, string identifier) {
     // coordinates.emplace_back(coordinate);
     frames.emplace_back(frame);
     this->identifier = identifier;
+    hist = Mat();
 
 }
 
@@ -930,6 +979,7 @@ Region::Region(const Rect &coordinates, FootballPlayer *  ptrPlayer) {
 
 Region::Region(Rect coordinates) {
     this->coordinates = coordinates;
+    playerInRegion = nullptr;
 }
 
 
@@ -977,6 +1027,8 @@ void textAboveRect(Mat frame, Rect rect, string text) {
 
 void histFromRect(Mat const &input, Rect const &rect, Mat &output) {
     Mat hsv;
+    if(input.empty())
+        exit(-55);
     cvtColor(input(rect), hsv, CV_BGR2HSV);
     // Quantize the hue to 30 levels
     // and the saturation to 32 levels
@@ -991,6 +1043,7 @@ void histFromRect(Mat const &input, Rect const &rect, Mat &output) {
 
     // we compute the histogram from the 0-th and 1-st channels
     int channels[] = {0, 1};
+
 
     calcHist( &hsv, 1, channels, Mat(), // do not use mask
               output, 2, histSize, ranges,

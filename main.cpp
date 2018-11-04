@@ -29,11 +29,6 @@ void save_video_projection(YOLODetector yoloDetector, char* inPath, char* outPat
 void darknet_predictions(char* video_path);
 
 int main(int argc, char *argv[]) {
-    std::cout << getBuildInformation() << std::endl;
-
-
-
-
     if (!(argc == 6 || argc == 7))
     {
         cout << "Wrong number of parameters." << endl;
