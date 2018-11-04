@@ -72,7 +72,7 @@ public:
     Rect area;
     vector<Region *> metaOldRegions;
     vector<Region *> metaNewRegions;
-    void matchOldAndNewRegions(Mat const & frame, int * matching);
+    int* matchOldAndNewRegions(Mat  frame);
 
 };
 
@@ -84,6 +84,7 @@ public:
     void workOnFile(char * filename);
 
     virtual ~RegionTracker();
+    Mat matCurrentFrame;
 
 protected:
 
@@ -122,6 +123,7 @@ protected:
      */
 
     FootballPlayer playerById(string id);
+    void deleteFromOutOfSight(FootballPlayer *);
 
 
     void detectOnFrame(Mat frame, vector<Rect> & detected);
@@ -145,7 +147,6 @@ protected:
 
     int objectCounter = 0;
     int currentFrame = 0;
-    Mat matCurrentFrame;
 
     FILE * roiData;
     FILE * debugData;

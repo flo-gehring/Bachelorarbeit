@@ -73,7 +73,7 @@ int RegionTracker::initialize(Mat frame) {
 
 bool RegionTracker::update(Mat frame) {
 
-    matCurrentFrame = frame;
+    matCurrentFrame = Mat(frame);
     ++currentFrame;
     // Update Region Vectors, new regions from last frame are now old, get new Regions from detector
     regionLastFrame.swap(regionsNewFrame);
@@ -599,6 +599,8 @@ void RegionTracker::workOnFile(char *filename) {
         printMatrix(matrix);
         #endif
         cout << "Frame No.: "<< frameCounter << endl;
+        matCurrentFrame = frame;
+
         update(frame);
 
         /* vector<MetaRegion> mr = calcMetaRegions();
@@ -796,7 +798,7 @@ vector<MetaRegion> RegionTracker::calcMetaRegions() {
  * Things taken into Consideration: Size, Histogramm, Position.
  * The bigger the value, the more the likelyhood of them representing the same area.
  */
-double calcWeightedSimiliarity(Region  * r1, Region *r2, Rect area, Mat const & frame){
+double calcWeightedSimiliarity(Region  * r1, Region *r2, Rect area, Mat frame){
     double similiaritySize, similiarityPosition, similiarityHistogramm;
 
     // Size
@@ -826,7 +828,7 @@ bool regionsMatch(Region * r1, Region * r2){
     return false;
 }
 
-void  MetaRegion::matchOldAndNewRegions(Mat const & frame , int * matching){
+int *  MetaRegion::matchOldAndNewRegions(Mat frame){
     vector<Region *> possibleAssociatedRegions;
 
     unsigned long oldRegionSize = metaOldRegions.size();
@@ -834,7 +836,7 @@ void  MetaRegion::matchOldAndNewRegions(Mat const & frame , int * matching){
     double matchingMatrix[oldRegionSize * metaNewRegions.size()];
 
     Region * currentOldRegion;
-
+    int * matching = new int[oldRegionSize * metaNewRegions.size()];
     // Calculate the weighted similarities for each of the Regions in the Meta Region
     for(int rowCounter = 0; rowCounter < oldRegionSize; ++rowCounter){
         currentOldRegion = metaOldRegions[rowCounter];
@@ -874,6 +876,7 @@ void  MetaRegion::matchOldAndNewRegions(Mat const & frame , int * matching){
         if(bestMatchingOld != -1)
             matching[(bestMatchingOld * oldRegionSize) + colCounter] = 1;
     }
+    return matching;
 }
 
 /*
@@ -904,8 +907,7 @@ void RegionTracker::interpretMetaRegions(vector<MetaRegion> & mr) {
         }
 
         else{
-            int matching[metaRegion.metaOldRegions.size() * metaRegion.metaNewRegions.size()];
-            metaRegion.matchOldAndNewRegions(matCurrentFrame, matching);
+            int * matching =  metaRegion.matchOldAndNewRegions(matCurrentFrame);
 
             bool newRegionMatched;
             for(int rowCounter = 0; rowCounter < metaRegion.metaOldRegions.size(); ++rowCounter){
@@ -914,6 +916,9 @@ void RegionTracker::interpretMetaRegions(vector<MetaRegion> & mr) {
                     if(matching[(rowCounter * metaRegion.metaOldRegions.size()) + colCounter == 1]){
                         newRegionMatched = true;
                         metaRegion.metaNewRegions[colCounter]->playerInRegion = metaRegion.metaOldRegions[rowCounter]->playerInRegion;
+
+                        // If the oldRegion was part of outOfSight Regions, delete it from there
+                        deleteFromOutOfSight(metaRegion.metaOldRegions[rowCounter]->playerInRegion);
                         break;
                     }
 
@@ -923,6 +928,7 @@ void RegionTracker::interpretMetaRegions(vector<MetaRegion> & mr) {
                     cout << "Push out of sight region" << endl;
                 }
             }
+            delete[] matching;
         }
         // If no matching old Region was found for a new Region, create a new Player.
         for(Region * newRegion: metaRegion.metaNewRegions){
@@ -940,6 +946,18 @@ void RegionTracker::interpretMetaRegions(vector<MetaRegion> & mr) {
 
     }
 
+}
+
+/*
+ * If the given FootballPlayer is in outOfSight Regions, the corresponding Region will be deleted.
+ */
+void RegionTracker::deleteFromOutOfSight(FootballPlayer * searchFor) {
+    auto iterator = outOfSightRegions.begin();
+    for(Region & r : outOfSightRegions){
+        if(r.playerInRegion == searchFor)
+            outOfSightRegions.erase(iterator);
+        ++iterator;
+    }
 }
 
 
