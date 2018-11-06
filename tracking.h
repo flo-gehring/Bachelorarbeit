@@ -56,6 +56,7 @@ class Region{
 public:
     Region(const Rect &coordinates,  FootballPlayer * ptrPlayer);
     Region(Rect coordinates);
+    Region(Region const & r1);
 
     Rect coordinates;
 
@@ -72,7 +73,7 @@ public:
     Rect area;
     vector<Region *> metaOldRegions;
     vector<Region *> metaNewRegions;
-    int* matchOldAndNewRegions(Mat  frame);
+    int* matchOldAndNewRegions(Mat  frame, int * matching);
 
 };
 
@@ -124,6 +125,7 @@ protected:
 
     FootballPlayer playerById(string id);
     void deleteFromOutOfSight(FootballPlayer *);
+    void addToOutOfSight(Region *);
 
 
     void detectOnFrame(Mat frame, vector<Rect> & detected);
