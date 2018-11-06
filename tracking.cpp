@@ -440,6 +440,20 @@ int *  MetaRegion::matchOldAndNewRegions(Mat frame, int * matching){
         }
     }
 
+    // Print Matrix for debugging purposes
+
+    cout << std::fixed << std::setw(5) << std::setprecision(4);
+
+    for(int rowCounter = 0; rowCounter < oldRegionSize; ++rowCounter){
+        currentOldRegion = metaOldRegions[rowCounter];
+        for(int colCounter = 0; colCounter < metaNewRegions.size(); ++colCounter){
+
+            cout  << matchingMatrix[(rowCounter * newRegionSize) + colCounter]<< " ";
+        }
+        cout << endl;
+    }
+    cout.clear();
+
     // Create a matrix which shows how the Regions correspond to each other.
     int bestMatchingOld;
     double weightedMax, currentWeight;
