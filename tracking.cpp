@@ -869,7 +869,7 @@ int *Region::getShirtColor(Mat const &frameFull) {
     regionImgReference.copyTo(regionImgCopy);
     Mat frame = regionImgReference;
 
-    int colorCount  =2;
+    const int colorCount  = 2;
     Mat labels, centers;
     helperRGBKMean(frame, colorCount, labels, centers);
     double weight[colorCount];
@@ -904,7 +904,12 @@ int *Region::getShirtColor(Mat const &frameFull) {
 
 
 
-    return nullptr;
+    int * colorValues = new int[3];
+    colorValues[0] = centers.at<float>(colorIndex, 0);
+    colorValues[1] = centers.at<float>(colorIndex, 1);
+    colorValues[2] = centers.at<float>(colorIndex, 3);
+
+    return colorValues;
 }
 
 void textAboveRect(Mat frame, Rect rect, string text) {
