@@ -22,6 +22,7 @@
 #include <iomanip>
 #include <stdio.h>
 #include <unordered_set>
+#include <algorithm>
 
 #include "cubetransform.h"
 
@@ -35,6 +36,7 @@ class FootballPlayer {
 public:
     FootballPlayer(Rect coordinate, int frame, string identifier);
     void addPosition(Rect coordinates, int frame);
+    void update(Rect const & coordinates, int frame);
 
     /*
      * Interpret as Follows: If i is an integer in "frames" at position X, then the Football Player appeared
@@ -49,7 +51,8 @@ public:
      * The following Data will be (hopefully) usefull in identifying the Player after occlusion.
      */
     int x_vel, y_vel; // "Velocity in Pixels per frame"
-    Mat hist; // Histogramm of the Player
+    Mat hist; // Histogramm of the Player when he was first detected.
+    Mat colorInformation;
 };
 
 
@@ -60,12 +63,24 @@ public:
     Region(Region const & r1);
 
     Rect coordinates;
-
     FootballPlayer * playerInRegion;
+    Mat colorInformation; // Color Informaion given in the LAB format
 
     static bool regionsIntersect(const Region & r1, const Region & r2);
     static bool regionsInRelativeProximity(Region const & r1, Region const &r2, int framesPassed);
-    void updateObjectsInRegion(const Region * oldRegion, int frameNum);
+    void updatePlayerInRegion(const Region * oldRegion, int frameNum);
+
+    /* Calcs the k-mean for colorCount colors and returns them converted into the L*A*B color space.
+     * Side effect: sets colorInformation property.
+     */
+    Mat getLabColors(Mat const & frame, int colorCount);
+
+    /*
+     * Returns an array of size 3 with the L*A*B colors of the T-Shirt / Shorts of the Football Player.
+     * Don't forget to delete[].
+     */
+    int* getShirtColor(Mat const& frame);
+
 };
 
 
@@ -92,33 +107,8 @@ protected:
 
     vector<MetaRegion> calcMetaRegions();
     void interpretMetaRegions(vector<MetaRegion> & mr);
-
-
-    /*
-     * Calculates a Matrix as described in the Paper from regionsNewFrame and regionsLastFrame.
-     */
-    void calcMatrix();
-
-    /*
-     * Applies the handle* Methods according to the calculated Matrix.
-     */
-    void interpretMatrix();
-
-    // Handles the Appearance of a completely new Region which has index regionIndex in regionsNewFrame.
-    void handleAppearance(int regionIndex);
-
-    // Handles the Dissapearance of a Region which has index regionIndex in regionsLastFrame.
-    void handleDisapearance(int regionIndex);
-
-    // Handles the Splitting of the Region regionsLastFrame[regionsIndex] into the given new regions.
-    void handleSplitting(int regionIndex, int splitInto[], int num);
-
-    // Handles the merging of multiple old regions into a single new region.
-    void handleMerging(int regions[], int num,  int mergeInto);
-
-    // If an old region directly corresponds to a new region, this method is applied.
-    void handleContinuation(int regionIndexOld, int regionIndexNew);
-
+    void assignRegions(MetaRegion  & metaRegion);
+    FootballPlayer * createNewFootballPlayer(Rect const &);
 
     /*
      * Factory Methods: Get Regions etc.
@@ -140,6 +130,7 @@ protected:
 
 
     vector<Region> outOfSightRegions;
+    vector<Region *> noMatchFound;
 
     vector<Region> regionsNewFrame;
     vector<Region> regionLastFrame;
@@ -160,4 +151,16 @@ protected:
 
 void textAboveRect(Mat frame, Rect rect, string text);
 void histFromRect(Mat const & input, Rect const & rect, Mat & output);
+/* Color difference as described by https://en.wikipedia.org/wiki/Color_difference#CIE94
+ * Look at this Page for information
+*/
+double deltaECIE94(unsigned char L1, char  a1, char b1, unsigned char L2, char a2, char b2);
+
+/*
+ * Performs k-Mean on frame, with k = clusterCount.
+ * labes and centers are as described in the opencv documentation.
+ * Labels has one Row and frame.cols * frame.rows columns, representing the frames pixel like this : frame[row, col] = labels[row * frame.cols + col]
+ */
+void helperRGBKMean(Mat const & frame, int clusterCount, Mat & labels, Mat & centers);
+
 #endif //PANORAMA2CUBEMAP_TRACKING_H

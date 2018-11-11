@@ -85,6 +85,7 @@ bool RegionTracker::update(Mat frame) {
     for(auto it = newRects.begin(); it != newRects.end(); ++it){
 
         regionsNewFrame.emplace_back(Region(*it));
+        assert((*it).area() != 0);
     }
 
 
@@ -213,13 +214,37 @@ void RegionTracker::workOnFile(char *filename) {
         putText(frame, "Tracker: Darknet" , Point(0, 100), FONT_HERSHEY_PLAIN, 4, Scalar(0,0,255), 2);
         putText(frame, "Frame No." + to_string(frameCounter), Point(0, 150), FONT_HERSHEY_PLAIN, 4, Scalar(0,0,255), 2);
 
+        int colorInfo [regionsNewFrame.size()][3];
+        Mat ci(1,3,CV_8UC3);
         for(Region region : regionsNewFrame){
 
-             CV_Assert(region.playerInRegion->identifier.size() > 0);
-             ++counter;
-        }
+            CV_Assert(region.playerInRegion->identifier.size() > 0);
+            Mat ci = region.getLabColors(frame, 2);
+            uchar * ciPtr = ci.ptr<uchar>(0);
 
-         drawOnFrame(frame);
+            colorInfo[counter][0] = * ciPtr;
+            colorInfo[counter][1] = *(ciPtr +1);
+            colorInfo[counter][2] = *(ciPtr + 2);
+            ++counter;
+            region.getShirtColor(frame);
+
+        }
+        for(int i = 0; i < regionsNewFrame.size() -1; ++i){
+            for(int x = i + 1; x < regionsNewFrame.size(); ++x)
+                printf("Compare P%i & P%i: %f \n",
+                         regionsNewFrame[i].playerInRegion->identifier.c_str()[0] - '0',
+                        regionsNewFrame[x].playerInRegion->identifier.c_str()[0] - '0',
+                        deltaECIE94(
+                        colorInfo[x][0],
+                        colorInfo[x][1],
+                        colorInfo[x][2],
+                        colorInfo[i][0],
+                        colorInfo[i][1],
+                        colorInfo[i][2])
+                        );
+        }
+        cout << flush;
+        drawOnFrame(frame);
 
 
     #ifdef SHOW
@@ -301,7 +326,6 @@ bool helperRegionsInMeta(MetaRegion & mr, vector<Region> & vectorOfRegions, unor
 
 /*
  * Calcs the Meta Regions.
- * TODO: Put all the Regions from the old frame which don't find a new MetaRegion to be into into outOfSight
  */
 vector<MetaRegion> RegionTracker::calcMetaRegions() {
 
@@ -405,7 +429,7 @@ double calcWeightedSimiliarity(Region  * r1, Region *r2, Rect area, Mat frame){
     double lengthVector = sqrt(pow(r1->coordinates.x - r2->coordinates.x, 2) + pow(r1->coordinates.y - r2->coordinates.y, 2));
     similiarityPosition = (hypotenuseMetaRegion - lengthVector) / hypotenuseMetaRegion;
 
-    //Histogramm
+    //Histogram
     // http://answers.opencv.org/question/8154/question-about-histogram-comparison-return-value/
     // Return Value of CV_COMP_CORRELL: -1 is worst, 1 is best. -> Map to  [0,1]
     Mat hist1, hist2;
@@ -421,6 +445,52 @@ bool regionsMatch(Region * r1, Region * r2){
     return false;
 }
 
+void RegionTracker::assignRegions( MetaRegion & metaRegion) {
+
+    int * matching =  new int[metaRegion.metaNewRegions.size() * metaRegion.metaOldRegions.size()];
+    metaRegion.matchOldAndNewRegions(matCurrentFrame, matching);
+
+#ifdef DEBUGPRINT
+    // Print matching
+            for(int rowCounter = 0; rowCounter < metaRegion.metaOldRegions.size(); ++rowCounter){
+                for(int colCounter = 0; colCounter < metaRegion.metaNewRegions.size(); ++colCounter){
+                    if(matching[(rowCounter * metaRegion.metaNewRegions.size()) + colCounter] == 1)
+                        cout << 1;
+                    else cout << 0;
+
+                }
+                cout << endl;
+            }
+#endif
+
+    bool newRegionMatched;
+    for(int rowCounter = 0; rowCounter < metaRegion.metaOldRegions.size(); ++rowCounter){
+        newRegionMatched = false;
+        for(int colCounter = 0; colCounter < metaRegion.metaNewRegions.size(); ++colCounter){
+            if(matching[(rowCounter * metaRegion.metaNewRegions.size()) + colCounter] == 1){
+                newRegionMatched = true;
+                metaRegion.metaNewRegions[colCounter]->playerInRegion = metaRegion.metaOldRegions[rowCounter]->playerInRegion;
+
+                // If the oldRegion was part of outOfSight Regions, delete it from there
+                deleteFromOutOfSight(metaRegion.metaOldRegions[rowCounter]->playerInRegion);
+                break;
+            }
+
+        }
+        if(!newRegionMatched){ // Add to out of sight Regions, if it's not already there
+            assert(metaRegion.metaOldRegions[rowCounter]->coordinates.area() != 0);
+            addToOutOfSight(metaRegion.metaOldRegions[rowCounter]);
+
+        }
+    }
+    delete[] matching;
+}
+
+
+/*
+ * Create a matrix M in which is saved which regions are the most similiar to each other.
+ * If M[i,j] == 1, then metaOldRegions[i] corresponds to metaNewRegion[j]
+ */
 int *  MetaRegion::matchOldAndNewRegions(Mat frame, int * matching){
 
     unsigned long oldRegionSize = metaOldRegions.size();
@@ -494,6 +564,7 @@ int *  MetaRegion::matchOldAndNewRegions(Mat frame, int * matching){
  */
 void RegionTracker::interpretMetaRegions(vector<MetaRegion> & mr) {
 
+    noMatchFound.clear();
 
     for(MetaRegion& metaRegion: mr){
 
@@ -502,76 +573,62 @@ void RegionTracker::interpretMetaRegions(vector<MetaRegion> & mr) {
         }
         else if(metaRegion.metaNewRegions.empty()){
             for(Region * region: metaRegion.metaOldRegions){
+                assert(region->coordinates.area() != 0);
                 addToOutOfSight(region);
             }
         }
         else if(metaRegion.metaOldRegions.empty()){
             for(Region * region: metaRegion.metaNewRegions){
-                ++objectCounter;
-                FootballPlayer * fp = new FootballPlayer(Rect(region->coordinates), currentFrame,
-                                                         string(to_string(objectCounter)));
-                footballPlayers.push_back(fp);
-                region->playerInRegion = fp;
-                cout << "Create new Player " << to_string(objectCounter) << endl;
+                noMatchFound.push_back(region);
             }
+
         }
 
         else{
-            int * matching =  new int[metaRegion.metaNewRegions.size() * metaRegion.metaOldRegions.size()];
-            //int * matching_asdf = matching;
-            metaRegion.matchOldAndNewRegions(matCurrentFrame, matching);
-
-            // Print matching
-            for(int rowCounter = 0; rowCounter < metaRegion.metaOldRegions.size(); ++rowCounter){
-                for(int colCounter = 0; colCounter < metaRegion.metaNewRegions.size(); ++colCounter){
-                    if(matching[(rowCounter * metaRegion.metaNewRegions.size()) + colCounter] == 1)
-                        cout << 1;
-                    else cout << 0;
-
-                }
-                cout << endl;
-            }
-
-            bool newRegionMatched;
-            for(int rowCounter = 0; rowCounter < metaRegion.metaOldRegions.size(); ++rowCounter){
-                newRegionMatched = false;
-                for(int colCounter = 0; colCounter < metaRegion.metaNewRegions.size(); ++colCounter){
-                    if(matching[(rowCounter * metaRegion.metaNewRegions.size()) + colCounter] == 1){
-                        newRegionMatched = true;
-                        metaRegion.metaNewRegions[colCounter]->playerInRegion = metaRegion.metaOldRegions[rowCounter]->playerInRegion;
-
-                        // If the oldRegion was part of outOfSight Regions, delete it from there
-                        deleteFromOutOfSight(metaRegion.metaOldRegions[rowCounter]->playerInRegion);
-                        break;
-                    }
-
-                }
-                if(!newRegionMatched){ // Add to out of sight Regions, if it's not already there
-                    addToOutOfSight(metaRegion.metaOldRegions[rowCounter]);
-                    cout << "Push out of sight region" << endl;
-                }
-            }
-            delete[] matching;
+            assignRegions(metaRegion);
         }
-        // If no matching old Region was found for a new Region, create a new Player.
+        // If no matching old Region was found for a new Region, put it in "no Match found" and check for a different
+        // out of sight region, as simply crating a new player was not very successful.
         for(Region * newRegion: metaRegion.metaNewRegions){
             if(newRegion->playerInRegion == nullptr){
-                ++objectCounter;
-                FootballPlayer * fp = new FootballPlayer(newRegion->coordinates, currentFrame,
-                        string(to_string(objectCounter)));
-                footballPlayers.push_back(fp);
-                newRegion->playerInRegion = fp;
-                cout << "Create new Player " << to_string(objectCounter) << endl;
 
+                noMatchFound.push_back(newRegion);
 
             }
         }
 
     }
+
+    // Try to find a matching Region for all the Regions which did not find a Partner.
+    MetaRegion restOfTheRegions;
+    Rect area;
+    for(Region & outOfSight : outOfSightRegions){
+        restOfTheRegions.metaOldRegions.push_back(&outOfSight);
+        area |= outOfSight.coordinates;
+    }
+    for(Region * noPartner: noMatchFound){
+        restOfTheRegions.metaNewRegions.push_back(noPartner);
+        area |= noPartner->coordinates;
+    }
+    restOfTheRegions.area = area;
+    if(! ( restOfTheRegions.metaNewRegions.empty() || restOfTheRegions.metaOldRegions.empty()))
+        assignRegions(restOfTheRegions);
+
+    // For the Regions still not having an assigned Player, create a new one
+    for(Region * noAssignedPlayer: noMatchFound){
+        if(noAssignedPlayer->playerInRegion == nullptr){
+            noAssignedPlayer->playerInRegion = createNewFootballPlayer(noAssignedPlayer->coordinates);
+        }
+    }
+
+
+#ifdef UNDEF
+    //Draw the meta Regions
     for(MetaRegion const & metaRegion1: mr ){
 
         rectangle(matCurrentFrame, metaRegion1.area, Scalar(255,0,0), 1 );
     }
+#endif
 
 }
 
@@ -592,8 +649,16 @@ void RegionTracker::addToOutOfSight(Region * regionPtr) {
     for(Region const & region: outOfSightRegions) {
         if (region.playerInRegion->identifier == regionPtr->playerInRegion->identifier) return;
     }
-    outOfSightRegions.emplace_back(*regionPtr);
+    assert(regionPtr->coordinates.area() != 0);
+    outOfSightRegions.emplace_back(Region(*regionPtr));
 }
+
+FootballPlayer *RegionTracker::createNewFootballPlayer(Rect const & coordinates) {
+    ++objectCounter;
+    FootballPlayer * fp = new FootballPlayer(coordinates, currentFrame, string(to_string(objectCounter)));
+    return fp;
+}
+
 
 FootballPlayer::FootballPlayer(Rect coordinate, int frame, string identifier) {
 
@@ -609,6 +674,57 @@ void FootballPlayer::addPosition(Rect coordinates, int frame) {
     this->frames.push_back(frame);
 }
 
+void getMiddleCoordinates(Rect const & r, int * x, int * y){
+    (*x) = r.x + r.width / 2;
+    (*y) = r.y + r.height / 2;
+}
+
+/*
+ * Calc new velocity, update coordinates and frame num.
+ */
+void FootballPlayer::update(Rect const &coordinates, int frame) {
+
+    int numKnownFrames = frames.size();
+    int  oldMiddleX, oldMiddleY,  newMiddleX, newMiddleY = 0; // To calc the velocity, we take the middle of the Bounding Box as spatial reference, not the top left corner.
+    int *addrOldMiddleX = &oldMiddleX;
+    int * addrOldMiddleY = &oldMiddleY;
+    int * addrNewMiddleX = & newMiddleX;
+    int * addrNewMiddleY = & newMiddleY;
+
+
+    addPosition(coordinates, frame);
+
+    // Get the last 5 Frames to estimate the position.
+    int lookUpNFrames = 5;
+
+    auto coordinatesIterator = this->coordinates.end();
+    auto frameIterator = this->frames.end();
+    if(numKnownFrames < lookUpNFrames) lookUpNFrames = numKnownFrames;
+
+    Rect  & currentRect = (* coordinatesIterator);
+    Rect  & rectBefore = (* --coordinatesIterator);
+    ++coordinatesIterator;
+    while(lookUpNFrames > 0){
+        currentRect = (* coordinatesIterator);
+        rectBefore = (* --coordinatesIterator);
+
+        getMiddleCoordinates(currentRect, addrNewMiddleX, addrNewMiddleY);
+        getMiddleCoordinates(rectBefore, addrOldMiddleX, addrOldMiddleY);
+
+        x_vel += newMiddleX - oldMiddleX;
+        y_vel += newMiddleY - oldMiddleY;
+
+
+
+        --lookUpNFrames;
+        --frameIterator;
+    }
+
+    x_vel = x_vel / (frame - (* frameIterator));
+    y_vel = y_vel / (frame - (*frameIterator));
+
+}
+
 /********************************************
  *                                          *
  *          Region Class Methods            *
@@ -618,9 +734,11 @@ void FootballPlayer::addPosition(Rect coordinates, int frame) {
 /*
  * Adds the Position of the Region and the current Frame to the tracked objects in the Region.
  */
-void Region::updateObjectsInRegion(const Region * oldRegion, int frameNum) {
-    // TODO    for(auto id = this->playerIds.begin(); id != playerIds.end(); ++id){
-    //  }
+void Region::updatePlayerInRegion(const Region * oldRegion, int frameNum) {
+
+    playerInRegion->coordinates.emplace_back(Rect(coordinates));
+    playerInRegion->frames.push_back(frameNum);
+
 }
 
 
@@ -657,7 +775,6 @@ void estimateLocalization(Region const & r1, int framesPassed, Rect & r){
 
 bool Region::regionsInRelativeProximity(Region const &r1, Region const &r2, int framesPassed) {
 
-
     Rect estimate1, estimate2;
     estimateLocalization(r1, framesPassed, estimate1);
     estimateLocalization(r2, framesPassed, estimate2);
@@ -668,6 +785,126 @@ bool Region::regionsInRelativeProximity(Region const &r1, Region const &r2, int 
 Region::Region(Region const &r1) {
     coordinates = Rect(r1.coordinates);
     playerInRegion = r1.playerInRegion;
+}
+
+
+Mat Region::getLabColors(Mat const &frame, int colorCount) {
+    Mat regionImgReference, regionImgCopy;
+
+        regionImgReference = frame(coordinates);
+        regionImgReference.copyTo(regionImgCopy);
+
+        // Copy all the Pixel values to the samples Mat
+        int clusterCount = colorCount;
+        Mat labels, centers;
+
+        helperRGBKMean(regionImgCopy, colorCount, labels, centers);
+
+        int  clusterColorCount[clusterCount];
+        for(int i = 0; i < clusterCount; ++i) *(clusterColorCount + i) = 0;
+
+
+        for(int x = 0; x < labels.rows; ++x){
+            (* (clusterColorCount + labels.at<int>(x, 0)))++;
+        }
+
+        Mat rgbColorClusters(Size(clusterCount,1), CV_8UC3);
+        for(int i = 0; i < clusterCount; ++i) {
+            float blue = centers.at<float>(i, 0);
+            float green = centers.at<float>(i, 1);
+            float red = centers.at<float>(i, 2);
+            /*
+            printf("Cluster %i: %i with (B,G,R) %f, %f, %f \n",
+                   i, *(clusterColorCount + i), blue, green,
+                   red);*/
+            rgbColorClusters.at<Vec3b>(0, i)[0] = red;
+            rgbColorClusters.at<Vec3b>(0, i)[1] = green;
+            rgbColorClusters.at<Vec3b>(0, i)[2] = blue;
+
+        }
+        Mat labColorCluster;
+        cvtColor(rgbColorClusters, labColorCluster, COLOR_BGR2Lab);
+
+// #define P2C_SHOW_KMEAN_WINDOW
+#ifdef P2C_SHOW_KMEAN_WINDOW
+        namedWindow("KMEAN");
+        Mat new_image( regionImgCopy.size(), regionImgCopy.type() );
+
+        cout << labColorCluster << endl;
+        for( int y = 0; y < regionImgCopy.rows; y++ ) {
+            for (int x = 0; x < regionImgCopy.cols; x++) {
+                // Save the index of the Cluster the current pixel is in in cluster_idx
+                // (Labels is (imgCopy.rows * imgCopy.cols) long and saves the cluster every pixel is in).
+                // centers saves the rgb values the center of every cluster.
+                int cluster_idx = labels.at<int>(y + x * regionImgCopy.rows, 0);
+                new_image.at<Vec3b>(y, x)[0] = centers.at<float>(cluster_idx, 0);
+                new_image.at<Vec3b>(y, x)[1] = centers.at<float>(cluster_idx, 1);
+                new_image.at<Vec3b>(y, x)[2] = centers.at<float>(cluster_idx, 2);
+            }
+
+        }
+        putText(new_image,  playerInRegion->identifier, Point(0,coordinates.height), FONT_HERSHEY_PLAIN, 1, Scalar(0,0,255), 2);
+        imshow("KMEAN", new_image);
+
+        while(true){
+            char c = waitKey(30);
+            if (c == 32) break;
+        }
+#endif
+
+
+    return Mat(labColorCluster);
+}
+
+/*
+ * Try to determine the color of the shirt.
+ * Perform k-Mean on the region, and check in which "Bucket" the pixels who are in the middle of the region are mostly in.
+ *  ->  Iterate rows and columns, add the appearances of the pixels and multiply by a factor which is determined by the position in the region.
+ *      Then, normalize the result.
+ */
+int *Region::getShirtColor(Mat const &frameFull) {
+    Mat regionImgReference, regionImgCopy;
+
+    regionImgReference = frameFull(coordinates);
+    regionImgReference.copyTo(regionImgCopy);
+    Mat frame = regionImgReference;
+
+    int colorCount  =2;
+    Mat labels, centers;
+    helperRGBKMean(frame, colorCount, labels, centers);
+    double weight[colorCount];
+    int numColorAppearances[colorCount];
+
+    // Prepare Arrays
+    for(int index = 0; index < colorCount; ++index){
+        weight[index] = 0;
+        numColorAppearances[index] = 0;
+    }
+
+    double yFactor, xFactor; // Range [1,2]
+    int clusterId;
+    float frameRows = frame.rows;
+    float frameCols = frame.cols;
+    for(int y = 0; y < frame.rows; ++y){
+        yFactor = 2 - (abs(float(y) - ( frameRows /2.0f)) / (frameRows/2));
+        for(int x = 0; x < frame.cols; ++x){
+            xFactor = 2 - (abs(y - (frameCols /2.0f)) / (frameCols/2.0f));
+             clusterId = labels.at<int>(y + x * frame.rows, 0);
+             weight[clusterId] += (xFactor + yFactor);
+             ++numColorAppearances[clusterId];
+        }
+    }
+
+    for(int index = 0; index < colorCount; ++index){
+        weight[index] = weight[index] / numColorAppearances[index];
+    }
+
+    double * elementPtr = max_element(weight, weight + colorCount );
+    int colorIndex = elementPtr - weight;
+
+
+
+    return nullptr;
 }
 
 void textAboveRect(Mat frame, Rect rect, string text) {
@@ -706,4 +943,57 @@ void histFromRect(Mat const &input, Rect const &rect, Mat &output) {
               true, // the histogram is uniform
               false );
 
+}
+
+
+// See https://en.wikipedia.org/wiki/Color_difference#CIE94 for the formula
+double deltaECIE94(unsigned char L1, char a1, char b1, unsigned char L2, char a2, char b2) {
+    // Two constants for our purpos (graphics)
+    const double K1 = 0.045;
+    const double K2 = 0.015;
+    // Weighing factors. Might adapt later
+    const double kc = 1;
+    const double kh = 1;
+    const int kL  = 1;
+
+
+    // Components of the formula
+    int deltaL = L1 - L2;
+    double C1 = sqrt((pow(a1, 2) + pow(b1, 2)));
+    double C2 = sqrt((pow(a2, 2) + pow(b2, 2)));
+    double deltaC = C1 - C2;
+
+    int deltaA = a1 - a2;
+    int deltaB = b1 - b2;
+
+    double SC = 1 + (K1 * C1);
+    double SH = 1 + (K2 * C1);
+
+    double deltaH = sqrt(pow(deltaA, 2) + pow(deltaB, 2)  - pow(deltaC, 2));
+
+    double deltaE94 = sqrt(
+            pow((double(deltaL)/ kL), 2) +
+            pow((deltaC / (kc * SC)),2 ) +
+            pow(deltaH / (kh * SH), 2)
+            );
+
+    return deltaE94;
+
+}
+
+void helperRGBKMean(Mat const &frame, int clusterCount, Mat &labels, Mat &centers) {
+
+    Mat samples(frame.rows * frame.cols, 3, CV_32F);
+    for( int y = 0; y < frame.rows; y++ ){
+        for( int x = 0; x < frame.cols; x++ ) {
+            for (int z = 0; z < 3; z++){
+                samples.at<float>(y + x * frame.rows, z) = frame.at<Vec3b>(y, x)[z];
+            }
+        }
+    }
+
+
+    int attempts = 5;
+
+    kmeans(samples, clusterCount, labels, TermCriteria(CV_TERMCRIT_ITER|CV_TERMCRIT_EPS, 10000, 0.0001), attempts, KMEANS_PP_CENTERS, centers );
 }
