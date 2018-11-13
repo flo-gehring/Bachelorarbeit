@@ -34,7 +34,7 @@ using namespace cv;
 
 class FootballPlayer {
 public:
-    FootballPlayer(Rect coordinate, int frame, string identifier);
+    FootballPlayer(Rect coordinate, int frame, string const & identifier);
     void addPosition(Rect coordinates, int frame);
     void update(Rect const & coordinates, int frame);
 
@@ -52,7 +52,7 @@ public:
      */
     int x_vel, y_vel; // "Velocity in Pixels per frame"
     Mat hist; // Histogramm of the Player when he was first detected.
-    Mat colorInformation;
+    Mat bgrShirtColor;
 };
 
 
@@ -64,10 +64,13 @@ public:
 
     Rect coordinates;
     FootballPlayer * playerInRegion;
-    Mat colorInformation; // Color Informaion given in the LAB format
+    Mat bgrShirtColor, labShirtColor; // Color Informaion given in the LAB format
+
 
     static bool regionsIntersect(const Region & r1, const Region & r2);
     static bool regionsInRelativeProximity(Region const & r1, Region const &r2, int framesPassed);
+    void createColorProfile(Mat const & frame);
+
     void updatePlayerInRegion(const Region * oldRegion, int frameNum);
 
     /* Calcs the k-mean for colorCount colors and returns them converted into the L*A*B color space.
@@ -76,10 +79,10 @@ public:
     Mat getLabColors(Mat const & frame, int colorCount);
 
     /*
-     * Returns an array of size 3 with the L*A*B colors of the T-Shirt / Shorts of the Football Player.
-     * Don't forget to delete[].
+     * Returns a Mat of size 3 with color
+     * of the T-Shirt / Shorts of the Football Player, saved as one Pixel in BGR Format.
      */
-    int* getShirtColor(Mat const& frame);
+    Mat getShirtColor(Mat const& frame);
 
 };
 
@@ -161,6 +164,6 @@ double deltaECIE94(unsigned char L1, char  a1, char b1, unsigned char L2, char a
  * labes and centers are as described in the opencv documentation.
  * Labels has one Row and frame.cols * frame.rows columns, representing the frames pixel like this : frame[row, col] = labels[row * frame.cols + col]
  */
-void helperRGBKMean(Mat const & frame, int clusterCount, Mat & labels, Mat & centers);
+void helperBGRKMean(Mat const &frame, int clusterCount, Mat &labels, Mat &centers);
 
 #endif //PANORAMA2CUBEMAP_TRACKING_H
