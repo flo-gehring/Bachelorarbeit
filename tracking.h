@@ -123,7 +123,7 @@ protected:
     void addToOutOfSight(Region *);
 
 
-    void detectOnFrame(Mat frame, vector<Rect> & detected);
+    vector<Rect> detectOnFrame(Mat  & frame);
     void drawOnFrame(Mat frame);
 
 

@@ -44,6 +44,11 @@ void printMatrix(unsigned  short mat[][22]){
     }
 
 }
+
+/*
+ * Initializes the Tracker.
+ * Performs the first round of detection which differs slightly from the following.
+ */
 int RegionTracker::initialize(Mat frame) {
 
     roiData = fopen("roidata.txt", "w");
@@ -51,10 +56,9 @@ int RegionTracker::initialize(Mat frame) {
 
     currentFrame = 0;
     matCurrentFrame = frame;
-    vector<Rect> detectedRects;
 
-    // All the detected Objects will be stored as recangles in detectedRects
-    detectOnFrame(frame, detectedRects);
+    // All the detected Objects will be stored as rectangles in detectedRects
+    vector<Rect> detectedRects = detectOnFrame(frame);
 
     objectCounter = 0;
 
@@ -63,6 +67,8 @@ int RegionTracker::initialize(Mat frame) {
 
 
     for(auto it = detectedRects.begin(); it != detectedRects.end(); ++it){
+
+        CV_Assert(it->area() != 0);
 
         newPlayer = new FootballPlayer((*it), 1, to_string(objectCounter));
 
@@ -81,6 +87,9 @@ int RegionTracker::initialize(Mat frame) {
     return objectCounter;
 }
 
+/*
+ * Everytime you grab a new Frame from your Videostream, pass it to this Method and
+ */
 bool RegionTracker::update(Mat frame) {
 
     matCurrentFrame = Mat(frame);
@@ -89,8 +98,7 @@ bool RegionTracker::update(Mat frame) {
     regionLastFrame.swap(regionsNewFrame);
     regionsNewFrame.clear();
 
-    vector<Rect> newRects;
-    detectOnFrame(frame, newRects);
+    vector<Rect> newRects = detectOnFrame(frame);
 
     for(auto it = newRects.begin(); it != newRects.end(); ++it){
 
@@ -112,7 +120,13 @@ bool RegionTracker::update(Mat frame) {
     return false;
 }
 
-void RegionTracker::detectOnFrame(Mat frame, vector<Rect> &detected) {
+/*
+ * Projects the frame, which is an equirectangular Panorama, onto the six sides of a cube and performs object
+ * Detection on them.
+ * The coordinates of the detected Bounding Boxes are projected back onto the original frame.
+ */
+vector<Rect> RegionTracker::detectOnFrame(Mat  & frame) {
+    vector<Rect> detected;
     int sideLength = 500;
     Mat face;
     Rect panoramaCoords;
@@ -140,6 +154,8 @@ void RegionTracker::detectOnFrame(Mat frame, vector<Rect> &detected) {
     for(int i : indices){
         detected.emplace_back(Rect(tmpDetected[i]));
     }
+
+    return detected;
 
 }
 
@@ -276,7 +292,7 @@ RegionTracker::~RegionTracker() {
 }
 
 
-bool helperOutOfSightInMeta(MetaRegion & mr, vector<Region *> & outOfSight){
+bool helperOutOfSightInMeta(MetaRegion & mr, vector<Region *> & outOfSight, unordered_set<Region *> alreadyFound){
     bool areaUnchanged = true;
     Rect commonArea;
     bool regionInMeta = false;
@@ -292,11 +308,13 @@ bool helperOutOfSightInMeta(MetaRegion & mr, vector<Region *> & outOfSight){
 
         regionInMeta = search(mr, region);
 
-        if(Region::regionsInRelativeProximity(*region, Region(mr.area), 10) && ! regionInMeta ){ // TODO Num of frames passed is magic literal
+        if(Region::regionsInRelativeProximity(*region, Region(mr.area), 10) && ! regionInMeta &&
+        alreadyFound.find(region) != alreadyFound.end()){ // TODO Num of frames passed is magic literal
 
             areaUnchanged = false;
             mr.area |= region->coordinates;
             mr.metaOldRegions.push_back(region);
+            alreadyFound.insert(region);
 
         }
     }
@@ -339,7 +357,8 @@ bool helperRegionsInMeta(MetaRegion & mr, vector<Region> & vectorOfRegions, unor
 
 
 /*
- * Calcs the Meta Regions.
+ * Tries to determine some "Meta Regions" by grouping all the Regions in physical proximity together.
+ * If a region from the last frame has no new region at all nearby, they will be marked as out of sight.
  */
 vector<MetaRegion> RegionTracker::calcMetaRegions() {
 
@@ -355,7 +374,7 @@ vector<MetaRegion> RegionTracker::calcMetaRegions() {
     // A set in which every Region from the last frame is, which found an associated MetaRegion
     unordered_set<Region *> associatedMRFound;
     associatedMRFound.reserve(regionLastFrame.size());
-    unordered_set<Region *> outOfSightFound; // Theres no need for this, but the function needs the argument
+    unordered_set<Region *> outOfSightFound;
 
     while(! indicesUnhandledRegions.empty()){
 
@@ -400,12 +419,9 @@ vector<MetaRegion> RegionTracker::calcMetaRegions() {
             }
 
             areaUnchanged &= helperRegionsInMeta(currentMetaRegion, regionLastFrame, associatedMRFound);
-            areaUnchanged &= helperOutOfSightInMeta(currentMetaRegion, outOfSightRegions);
+            areaUnchanged &= helperOutOfSightInMeta(currentMetaRegion, outOfSightRegions, outOfSightFound);
 
         }
-        // TODO Remove again
-        // for(Region * rOld: currentMetaRegion.metaOldRegions) CV_Assert(! rOld->labShirtColor.ptr(0));
-
 
     }
 
@@ -477,6 +493,12 @@ bool regionsMatch(Region * r1, Region * r2){
     return false;
 }
 
+
+/*
+ * Uses matchOldAndNewRegions to get a matrix which represents how the Regions correspond to each other.
+ * If two matching Regions are found the correct FootballPlayer will be assigned and the old Region deleted from
+ * outOfSightRegions if its needed.
+ */
 void RegionTracker::assignRegions( MetaRegion & metaRegion) {
 
     int * matching =  new int[metaRegion.metaNewRegions.size() * metaRegion.metaOldRegions.size()];
@@ -510,7 +532,6 @@ void RegionTracker::assignRegions( MetaRegion & metaRegion) {
 
         }
         if(!newRegionMatched){ // Add to out of sight Regions, if it's not already there
-            assert(metaRegion.metaOldRegions[rowCounter]->coordinates.area() != 0);
             addToOutOfSight(metaRegion.metaOldRegions[rowCounter]);
 
         }
@@ -543,7 +564,7 @@ int *  MetaRegion::matchOldAndNewRegions(Mat frame, int * matching){
     }
 
     // Print Matrix for debugging purposes
-
+#ifdef P2C_SHOW_MATCHING_MATRIX
     cout << std::fixed << std::setw(5) << std::setprecision(4);
 
     for(int rowCounter = 0; rowCounter < oldRegionSize; ++rowCounter){
@@ -555,8 +576,10 @@ int *  MetaRegion::matchOldAndNewRegions(Mat frame, int * matching){
         cout << endl;
     }
     cout.clear();
+#endif
 
     // Create a matrix which shows how the Regions correspond to each other.
+    // TODO: Find a better algorithm.
     int bestMatchingOld;
     double weightedMax, currentWeight;
 
@@ -592,7 +615,18 @@ int *  MetaRegion::matchOldAndNewRegions(Mat frame, int * matching){
 }
 
 /*
+ * old Regions: regions from the last frame and out of sight regions.
+ * new Regions: Regions from the current frame.
+ *
  * Assign a Player to every Region in the Meta Region, mark the rest as out of sight.
+ * Every new Region which has only one old Region nearby will be assigned the player of the  old region.
+ *
+ * When multiple old Regions correspond to one or more new Regions, assignRegions will be invoked.
+ *
+ * If a new Region has no old Region nearby, all the out of sight regions will be taken into consideration
+ * and also matchOldAndNewRegions will be used on a new Meta Region containing all unmatched old and new regions.
+ *
+ * If absolutely no old Region was found, a new FootBallPlayer will be created.
  */
 void RegionTracker::interpretMetaRegions(vector<MetaRegion> & mr) {
 
@@ -605,7 +639,6 @@ void RegionTracker::interpretMetaRegions(vector<MetaRegion> & mr) {
         }
         else if(metaRegion.metaNewRegions.empty()){
             for(Region * region: metaRegion.metaOldRegions){
-                assert(region->coordinates.area() != 0);
                 addToOutOfSight(region);
             }
         }
@@ -613,7 +646,6 @@ void RegionTracker::interpretMetaRegions(vector<MetaRegion> & mr) {
             for(Region * region: metaRegion.metaNewRegions){
                 noMatchFound.push_back(region);
             }
-
         }
 
         else{
@@ -623,9 +655,7 @@ void RegionTracker::interpretMetaRegions(vector<MetaRegion> & mr) {
         // out of sight region, as simply crating a new player was not very successful.
         for(Region * newRegion: metaRegion.metaNewRegions){
             if(newRegion->playerInRegion == nullptr){
-
                 noMatchFound.push_back(newRegion);
-
             }
         }
 
@@ -687,6 +717,7 @@ void RegionTracker::addToOutOfSight(Region * regionPtr) {
 
     auto * newOutOfSight = new Region(*regionPtr);
     outOfSightRegions.push_back(newOutOfSight);
+    assert(outOfSightRegions.back()->coordinates.area() != 0);
 }
 
 FootballPlayer *RegionTracker::createNewFootballPlayer(Rect const & coordinates) {
