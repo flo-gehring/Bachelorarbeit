@@ -18,6 +18,7 @@
 // TODO: Save color Info about the Region and intergrate into assignment process.
 // -> Also in the Player? -> T-Shirt color.
 
+// TODO! Make outOfSightRegions a vector of Pointers, so that when resolving addresses!
 
 // TODO: Performance Consideration: Don't check upper and lower cubeside.
 
@@ -227,11 +228,9 @@ void RegionTracker::workOnFile(char *filename) {
         for(Region region : regionsNewFrame){
 
             CV_Assert(region.playerInRegion->identifier.size() > 0);
-            CV_Assert(region.labShirtColor.ptr(0) != nullptr);
+
         }
-        for(Region const & region: outOfSightRegions){
-            CV_Assert(region.labShirtColor.ptr(0) != nullptr);
-        }
+
 
         drawOnFrame(frame);
 
@@ -277,6 +276,33 @@ RegionTracker::~RegionTracker() {
 }
 
 
+bool helperOutOfSightInMeta(MetaRegion & mr, vector<Region *> & outOfSight){
+    bool areaUnchanged = true;
+    Rect commonArea;
+    bool regionInMeta = false;
+
+    auto search = [](MetaRegion & mr, Region * r){
+
+        for(Region * r_ptr: mr.metaOldRegions) if(r_ptr == r) return true;
+        for(Region * r_ptr: mr.metaNewRegions) if(r_ptr == r) return true;
+        return false;
+    };
+    for(Region * region : outOfSight){
+        commonArea = region->coordinates & mr.area;
+
+        regionInMeta = search(mr, region);
+
+        if(Region::regionsInRelativeProximity(*region, Region(mr.area), 10) && ! regionInMeta ){ // TODO Num of frames passed is magic literal
+
+            areaUnchanged = false;
+            mr.area |= region->coordinates;
+            mr.metaOldRegions.push_back(region);
+
+        }
+    }
+    return areaUnchanged;
+}
+
 /*
  * Helper Function:
  * Iterates Vector and puts matching Regions into the Meta Region.
@@ -303,9 +329,7 @@ bool helperRegionsInMeta(MetaRegion & mr, vector<Region> & vectorOfRegions, unor
 
             areaUnchanged = false;
             mr.area |= region.coordinates;
-            CV_Assert(region.labShirtColor.ptr(0) != nullptr);
             mr.metaOldRegions.push_back(&region);
-
             regionFound.insert(&region);
 
         }
@@ -376,11 +400,11 @@ vector<MetaRegion> RegionTracker::calcMetaRegions() {
             }
 
             areaUnchanged &= helperRegionsInMeta(currentMetaRegion, regionLastFrame, associatedMRFound);
-            areaUnchanged &= helperRegionsInMeta(currentMetaRegion, outOfSightRegions, outOfSightFound);
+            areaUnchanged &= helperOutOfSightInMeta(currentMetaRegion, outOfSightRegions);
 
         }
         // TODO Remove again
-        for(Region * rOld: currentMetaRegion.metaOldRegions) CV_Assert(! rOld->labShirtColor.ptr(0));
+        // for(Region * rOld: currentMetaRegion.metaOldRegions) CV_Assert(! rOld->labShirtColor.ptr(0));
 
 
     }
@@ -436,15 +460,14 @@ double calcWeightedSimiliarity(Region  * r1, Region *r2, Rect area, Mat frame){
     // Color
     // CIE94 Formula. If the difference has a value greater than 100, similarityColor turns negativ.
     // TODO: Think about the difference Value: Maybe make it turn negative with an even smaller Value like 20.
-    uchar * colorR1Ptr = r1->labShirtColor.ptr(0);
-    uchar * colorR2Ptr = r2->labShirtColor.ptr(0);
-    if(colorR1Ptr == nullptr || colorR2Ptr == nullptr){
+    // 0x56215dc9c318
 
-    }
+
     similarityColor = deltaECIE94(
-            colorR1Ptr[0], colorR1Ptr[1], colorR1Ptr[2],
-            colorR2Ptr[0], colorR2Ptr[1], colorR2Ptr[2]
-            );
+                r1->labShirtColor[0], r1->labShirtColor[1], r1->labShirtColor[2],
+                r2->labShirtColor[0], r2->labShirtColor[1], r2->labShirtColor[2]
+        );
+
     similarityColor = (100 - similarityColor) / 100;
 
 
@@ -611,9 +634,9 @@ void RegionTracker::interpretMetaRegions(vector<MetaRegion> & mr) {
     // Try to find a matching Region for all the Regions which did not find a Partner.
     MetaRegion restOfTheRegions;
     Rect area;
-    for(Region & outOfSight : outOfSightRegions){
-        restOfTheRegions.metaOldRegions.push_back(&outOfSight);
-        area |= outOfSight.coordinates;
+    for(Region * outOfSight : outOfSightRegions){
+        restOfTheRegions.metaOldRegions.push_back(outOfSight);
+        area |= outOfSight->coordinates;
     }
     for(Region * noPartner: noMatchFound){
         restOfTheRegions.metaNewRegions.push_back(noPartner);
@@ -646,20 +669,24 @@ void RegionTracker::interpretMetaRegions(vector<MetaRegion> & mr) {
  */
 void RegionTracker::deleteFromOutOfSight(FootballPlayer * searchFor) {
     auto iterator = outOfSightRegions.begin();
-    for(Region & r : outOfSightRegions){
-        if(r.playerInRegion == searchFor)
+    for(Region * r : outOfSightRegions){
+        if(r->playerInRegion == searchFor){
             outOfSightRegions.erase(iterator);
+            delete r;
+        }
         ++iterator;
     }
 }
 
 void RegionTracker::addToOutOfSight(Region * regionPtr) {
 
-    for(Region const & region: outOfSightRegions) {
-        if (region.playerInRegion->identifier == regionPtr->playerInRegion->identifier) return;
+    for(Region * region: outOfSightRegions) {
+        if (region->playerInRegion->identifier == regionPtr->playerInRegion->identifier) return;
     }
     assert(regionPtr->coordinates.area() != 0);
-    outOfSightRegions.emplace_back(Region(*regionPtr));
+
+    auto * newOutOfSight = new Region(*regionPtr);
+    outOfSightRegions.push_back(newOutOfSight);
 }
 
 FootballPlayer *RegionTracker::createNewFootballPlayer(Rect const & coordinates) {
@@ -794,8 +821,11 @@ bool Region::regionsInRelativeProximity(Region const &r1, Region const &r2, int 
 Region::Region(Region const &r1) {
     coordinates = Rect(r1.coordinates);
     playerInRegion = r1.playerInRegion;
-    labShirtColor = Mat(r1.labShirtColor);
-    bgrShirtColor = Mat(r1.bgrShirtColor);
+    for(unsigned char i = 0; i < 3; ++i){
+      labShirtColor[i] = r1.labShirtColor[i];
+      bgrShirtColor[i] = r1.bgrShirtColor[i];
+    }
+
 }
 
 
@@ -931,8 +961,18 @@ Mat Region::getShirtColor(Mat const &frameFull) {
  * Fills the Paramters bgrShirtColor and labShirtColor.
  */
 void Region::createColorProfile(Mat const &frame) {
-    bgrShirtColor = getShirtColor(frame);
-    cvtColor(bgrShirtColor, labShirtColor, CV_BGR2Lab);
+    Mat bgrShirtColorTemp = getShirtColor(frame);
+    Mat labShirtColorTemp;
+    cvtColor(bgrShirtColorTemp, labShirtColorTemp, CV_BGR2Lab);
+
+    uchar * bgrColorPtr = bgrShirtColorTemp.ptr<uchar>(0);
+    uchar * labColorPtr = labShirtColorTemp.ptr<uchar>(0);
+
+    for(int i = 0; i < 3; ++i){
+        labShirtColor[i] = labColorPtr[i];
+        bgrShirtColor[i] = bgrColorPtr[i];
+    }
+
 
 }
 

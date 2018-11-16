@@ -64,7 +64,8 @@ public:
 
     Rect coordinates;
     FootballPlayer * playerInRegion;
-    Mat bgrShirtColor, labShirtColor; // Color Informaion given in the LAB format
+    unsigned char bgrShirtColor[3];
+    unsigned char labShirtColor[3]; // Color Informaion given in the LAB format
 
 
     static bool regionsIntersect(const Region & r1, const Region & r2);
@@ -132,7 +133,7 @@ protected:
     unsigned short  matrix[matrixDimensions][matrixDimensions];
 
 
-    vector<Region> outOfSightRegions;
+    vector<Region *> outOfSightRegions;
     vector<Region *> noMatchFound;
 
     vector<Region> regionsNewFrame;
