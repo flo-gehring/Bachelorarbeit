@@ -124,7 +124,7 @@ protected:
 
 
     vector<Rect> detectOnFrame(Mat  & frame);
-    void drawOnFrame(Mat frame);
+    void drawOnFrame(Mat frame, vector<MetaRegion> const & mr);
 
 
     double areaThreshold = 0.3;

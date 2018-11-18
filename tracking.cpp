@@ -160,7 +160,7 @@ vector<Rect> RegionTracker::detectOnFrame(Mat  & frame) {
 
 }
 
-void RegionTracker::drawOnFrame(Mat frame) {
+void RegionTracker::drawOnFrame(Mat frame, vector<MetaRegion> const & metaRegions) {
     for (Region & r: regionsNewFrame){
         string id;
         id = r.playerInRegion->identifier;
@@ -168,6 +168,18 @@ void RegionTracker::drawOnFrame(Mat frame) {
         textAboveRect(frame, r.coordinates, id);
         rectangle(frame, r.coordinates, Scalar(0, 0, 255), 2);
 
+    }
+
+    for(MetaRegion const & mr : metaRegions){
+        string players;
+        rectangle(frame, mr.area, Scalar(255, 0, 0), 2);
+        for(Region * region : mr.metaNewRegions){
+            players.append(region->playerInRegion->identifier);
+            players.append(", ");
+        }
+        players.erase(players.size() - 2, 2);
+        putText(frame, players, Point(mr.area.x , mr.area.y + mr.area.height + 20), FONT_HERSHEY_PLAIN, 3, Scalar(255, 0, 0, 2));
+        players.clear();
     }
 }
 
@@ -188,7 +200,6 @@ void RegionTracker::workOnFile(char *filename) {
     }
 
     initialize(frame);
-#undef SHOW
 #ifdef SHOW
     const char * windowName = "Occlusion Tracker";
     namedWindow(windowName);
@@ -200,7 +211,7 @@ void RegionTracker::workOnFile(char *filename) {
                    frame.size(), true);
 #endif
 
-    drawOnFrame(frame);
+    drawOnFrame(frame, vector<MetaRegion>());
 
     time_t timeStart = time(0);
     float avgFrameRate = 0;
@@ -223,15 +234,8 @@ void RegionTracker::workOnFile(char *filename) {
 
         update(frame);
 
+        vector<MetaRegion> mr = calcMetaRegions();
 
-
-        /* vector<MetaRegion> mr = calcMetaRegions();
-        for(MetaRegion const & metaRegion : mr){
-         rectangle(frame, metaRegion.area, Scalar(255, 0, 0), 2);
-        }
-         */
-
-         int counter = 0;
         #ifdef DEBUG
         cout << "Updated Frame " << frameCounter << endl;
         #endif
@@ -253,7 +257,7 @@ void RegionTracker::workOnFile(char *filename) {
         }
 
 
-        drawOnFrame(frame);
+        drawOnFrame(frame, mr);
 
 
     #ifdef SHOW
@@ -429,7 +433,7 @@ vector<MetaRegion> RegionTracker::calcMetaRegions() {
 
                     areaUnchanged = false;
 
-                    currentMetaRegion.area |= currentRegion->coordinates;
+                    currentMetaRegion.area |= regionToCompare->coordinates;
                     currentMetaRegion.metaNewRegions.push_back(& regionsNewFrame[* newRegionIndex]);
 
                     indicesUnhandledRegions.erase(newRegionIndex);
@@ -445,6 +449,8 @@ vector<MetaRegion> RegionTracker::calcMetaRegions() {
 
                 regionToCompare = outOfSightRegions[*outOfSightIndex];
 
+
+
                 // A new Region from the current Frame for the Meta Region
                 if(Region::regionsIntersect(*regionToCompare, Region(currentMetaRegion.area))
                    || Region::regionsInRelativeProximity(*regionToCompare, Region(currentMetaRegion.area), 10)){ // TODO Num of frames passed is magic literal
@@ -452,8 +458,10 @@ vector<MetaRegion> RegionTracker::calcMetaRegions() {
 
                     areaUnchanged = false;
 
-                    currentMetaRegion.area |= currentRegion->coordinates;
+                    currentMetaRegion.area |= regionToCompare->coordinates;
                     currentMetaRegion.metaOldRegions.push_back(outOfSightRegions[* outOfSightIndex]);
+
+                    outOfSightFound.insert(outOfSightRegions[*outOfSightIndex]);
 
                     indicesUnhandledOutOfSight.erase(outOfSightIndex);
 
@@ -475,8 +483,10 @@ vector<MetaRegion> RegionTracker::calcMetaRegions() {
 
                     areaUnchanged = false;
 
-                    currentMetaRegion.area |= currentRegion->coordinates;
+                    currentMetaRegion.area |= regionToCompare->coordinates;
                     currentMetaRegion.metaOldRegions.push_back(& regionLastFrame[* lastFrameIndex]);
+
+                    associatedMRFound.insert( &regionLastFrame[* lastFrameIndex]);
 
                     indicesUnhandledOld.erase(lastFrameIndex);
 
@@ -496,15 +506,7 @@ vector<MetaRegion> RegionTracker::calcMetaRegions() {
             addToOutOfSight(r);
     }
 
-    for(MetaRegion const & mr1: metaRegions){
-        for(MetaRegion const & mr2: metaRegions){
-            for(Region * r1: mr1.metaOldRegions){
-                for(Region * r2: mr2.metaNewRegions){
-                    assert(r1->playerInRegion != r2->playerInRegion);
-                }
-            }
-        }
-    }
+
     int tmp = 0;
     for(MetaRegion const & mr : metaRegions) {
         if(mr.metaNewRegions.size() != 1 || mr.metaOldRegions.size() != 1){
@@ -513,6 +515,9 @@ vector<MetaRegion> RegionTracker::calcMetaRegions() {
         }
         ++tmp;
     }
+
+    for(Region * r : outOfSightFound) assert(outOfSightFound.count(r) <= 1);
+    for(Region * r: associatedMRFound) assert(associatedMRFound.count(r) <= 1);
     return metaRegions;
 }
 
@@ -858,6 +863,7 @@ void RegionTracker::addToOutOfSight(Region * regionPtr) {
 
     for(Region * region: outOfSightRegions) {
         if (region->playerInRegion == regionPtr->playerInRegion) return;
+        assert(region->playerInRegion != regionPtr->playerInRegion);
     }
     assert(regionPtr->coordinates.area() != 0);
 
@@ -1132,8 +1138,8 @@ void Region::createColorProfile(Mat const &frame) {
     Mat labShirtColorTemp;
     cvtColor(bgrShirtColorTemp, labShirtColorTemp, CV_BGR2Lab);
 
-    uchar * bgrColorPtr = bgrShirtColorTemp.ptr<uchar>(0);
-    uchar * labColorPtr = labShirtColorTemp.ptr<uchar>(0);
+    auto * bgrColorPtr = bgrShirtColorTemp.ptr<uchar>(0);
+    auto * labColorPtr = labShirtColorTemp.ptr<uchar>(0);
 
     for(int i = 0; i < 3; ++i){
         labShirtColor[i] = labColorPtr[i];
