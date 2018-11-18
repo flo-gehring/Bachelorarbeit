@@ -173,11 +173,12 @@ void RegionTracker::drawOnFrame(Mat frame, vector<MetaRegion> const & metaRegion
     for(MetaRegion const & mr : metaRegions){
         string players;
         rectangle(frame, mr.area, Scalar(255, 0, 0), 2);
-        for(Region * region : mr.metaNewRegions){
+        for(Region * region : mr.metaOldRegions){
             players.append(region->playerInRegion->identifier);
             players.append(", ");
         }
-        players.erase(players.size() - 2, 2);
+        if(players.length() != 0)
+            players.erase(players.size() - 2, 2);
         putText(frame, players, Point(mr.area.x , mr.area.y + mr.area.height + 20), FONT_HERSHEY_PLAIN, 3, Scalar(255, 0, 0, 2));
         players.clear();
     }
@@ -200,6 +201,8 @@ void RegionTracker::workOnFile(char *filename) {
     }
 
     initialize(frame);
+#undef SHOW
+
 #ifdef SHOW
     const char * windowName = "Occlusion Tracker";
     namedWindow(windowName);
@@ -258,7 +261,6 @@ void RegionTracker::workOnFile(char *filename) {
 
 
         drawOnFrame(frame, mr);
-
 
     #ifdef SHOW
          resize(frame, resizedFrame, Size(1980, 1020));
