@@ -28,7 +28,100 @@ void show_on_cubefaces(YOLODetector yoloD, char * video_path);
 void save_video_projection(YOLODetector yoloDetector, char* inPath, char* outPath);
 void darknet_predictions(char* video_path);
 
+void printMatrix(int rows, int cols, int * mat){
+    for(int r = 0; r < rows; ++r){
+        for (int i = 0; i < cols; ++i) {
+            cout<< mat[(cols * r) + i] <<" ";
+        }
+        cout << endl;
+    }
+}
+
+
+void optimizeWeightSelectionTest(int rows, int cols, double * weightMatrix, int * selected){
+    short selectedCells[rows];
+    short temp_selectedCells[rows];
+
+    for(int i = 0; i < rows; ++i){
+        selectedCells[i] = -2;
+        temp_selectedCells[i] = -2;
+    }
+    bool finished = false;
+    double temp_Weight;
+    double maxWeight = 0;
+
+    int currentRow = 0;
+
+    while(!finished){
+
+        ++temp_selectedCells[currentRow];
+
+        if(temp_selectedCells[currentRow] == cols){ // Last Column of Row was checked
+            // Check if loop is finished
+            finished = true;
+            for(int i = 0; i < rows; ++i){
+                finished &= temp_selectedCells[i] >= cols-1;
+            }
+            if(! finished){
+                temp_selectedCells[currentRow] = -2;
+                --currentRow;
+            }
+            continue;
+        }
+        else if(currentRow != rows-1 ){ // Last Column, combination was checked in last iteration.
+            ++currentRow;
+            continue;
+        }
+        else{ // Last Row, increase counter and  check new selection
+
+            // Check if Selection is valid and Calc selected Weight
+            bool selectionValid = true;
+            temp_Weight = 0;
+            for(int i = 0; i < rows; ++i){
+                for(int r = i+1; r < rows; ++r){
+                    selectionValid &= ((temp_selectedCells[i] != temp_selectedCells[r]) || temp_selectedCells[i] == -1);
+                }
+
+                if(temp_selectedCells[i] > -1){
+                    temp_Weight += weightMatrix[(cols * i) + temp_selectedCells[i]];
+                }
+            }
+
+            // If new Maxmium was found,
+            if(selectionValid && temp_Weight > maxWeight){
+                maxWeight = temp_Weight;
+                for(int i = 0; i < rows; ++i)
+                    selectedCells[i] = temp_selectedCells[i];
+            }
+
+
+
+            for(int i = 0; i < rows; ++i)  cout << temp_selectedCells[i] << " ";
+            cout << endl;
+        }
+        // Check if loop is finished
+        finished = true;
+        for(int i = 0; i < rows; ++i){
+            finished &= temp_selectedCells[i] == cols-1;
+        }
+
+
+    }
+
+    for(int i = 0; i < rows; ++i){
+        if(selectedCells[i] != -1){
+            selected[(i * cols) + selectedCells[i]] = 1;
+        }
+    }
+
+
+}
+
 int main(int argc, char *argv[]) {
+
+
+
+
     if (!(argc == 6 || argc == 7))
     {
         cout << "Wrong number of parameters." << endl;
