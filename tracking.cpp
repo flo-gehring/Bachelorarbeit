@@ -102,6 +102,9 @@ bool RegionTracker::update(Mat frame) {
 
     vector<MetaRegion> vectorMetaRegion = calcMetaRegions();
     interpretMetaRegions(vectorMetaRegion);
+    for(Region * r1:outOfSightRegions){
+        for (Region const & r2 : regionsNewFrame) assert(r1->playerInRegion != r2.playerInRegion);
+    }
 
     for(Region & newRegion: regionsNewFrame) newRegion.updatePlayerInRegion(currentFrame);
 
@@ -185,7 +188,7 @@ void RegionTracker::workOnFile(char *filename) {
     }
 
     initialize(frame);
-
+#undef SHOW
 #ifdef SHOW
     const char * windowName = "Occlusion Tracker";
     namedWindow(windowName);
@@ -219,6 +222,8 @@ void RegionTracker::workOnFile(char *filename) {
         matCurrentFrame = frame;
 
         update(frame);
+
+
 
         /* vector<MetaRegion> mr = calcMetaRegions();
         for(MetaRegion const & metaRegion : mr){
@@ -311,7 +316,7 @@ bool helperOutOfSightInMeta(MetaRegion & mr, vector<Region *> & outOfSight, unor
         int framesDifference = currentFrame - region->playerInRegion->frames.back();
 
         if(Region::regionsInRelativeProximity(*region, Region(mr.area), framesDifference) && ! regionInMeta &&
-        alreadyFound.find(region) != alreadyFound.end()){ // TODO Num of frames passed is magic literal
+       alreadyFound.count(region) == 0){ // TODO Num of frames passed is magic literal
 
             areaUnchanged = false;
             mr.area |= region->coordinates;
@@ -364,6 +369,8 @@ bool helperRegionsInMeta(MetaRegion & mr, vector<Region> & vectorOfRegions, unor
 }
 
 
+
+
 /*
  * Tries to determine some "Meta Regions" by grouping all the Regions in physical proximity together.
  * If a region from the last frame has no new region at all nearby, they will be marked as out of sight.
@@ -372,6 +379,12 @@ vector<MetaRegion> RegionTracker::calcMetaRegions() {
 
     vector<int> indicesUnhandledRegions(regionsNewFrame.size());
     std::iota(std::begin(indicesUnhandledRegions),std::end(indicesUnhandledRegions), 0);
+
+    vector<int> indicesUnhandledOutOfSight(outOfSightRegions.size());
+    std::iota(std::begin(indicesUnhandledOutOfSight), std::end(indicesUnhandledOutOfSight), 0);
+
+    vector<int> indicesUnhandledOld(regionLastFrame.size());
+    std::iota(std::begin(indicesUnhandledOld), std::end(indicesUnhandledOld),0);
 
     Region * currentRegion;
     Region * regionToCompare;
@@ -403,7 +416,7 @@ vector<MetaRegion> RegionTracker::calcMetaRegions() {
         while(!areaUnchanged){
 
             areaUnchanged = true;
-
+            // TODO Refactor
             for(auto newRegionIndex = indicesUnhandledRegions.begin();
             newRegionIndex != indicesUnhandledRegions.end(); /*Do nothing */){
 
@@ -427,9 +440,51 @@ vector<MetaRegion> RegionTracker::calcMetaRegions() {
                 }
             }
 
-            areaUnchanged &= helperRegionsInMeta(currentMetaRegion, regionLastFrame, associatedMRFound, currentFrame);
-            areaUnchanged &= helperOutOfSightInMeta(currentMetaRegion, outOfSightRegions, outOfSightFound, currentFrame);
+            for(auto outOfSightIndex = indicesUnhandledOutOfSight.begin();
+                outOfSightIndex!= indicesUnhandledOutOfSight.end(); /*Do nothing */){
 
+                regionToCompare = outOfSightRegions[*outOfSightIndex];
+
+                // A new Region from the current Frame for the Meta Region
+                if(Region::regionsIntersect(*regionToCompare, Region(currentMetaRegion.area))
+                   || Region::regionsInRelativeProximity(*regionToCompare, Region(currentMetaRegion.area), 10)){ // TODO Num of frames passed is magic literal
+                    //if((regionToCompare->coordinates & currentMetaRegion.area).area() > 0){
+
+                    areaUnchanged = false;
+
+                    currentMetaRegion.area |= currentRegion->coordinates;
+                    currentMetaRegion.metaOldRegions.push_back(outOfSightRegions[* outOfSightIndex]);
+
+                    indicesUnhandledOutOfSight.erase(outOfSightIndex);
+
+                }
+                else{ // Only increase iterator if no Element was deleted.
+                    ++outOfSightIndex;
+                }
+            }
+
+            for(auto lastFrameIndex = indicesUnhandledOld.begin();
+                lastFrameIndex != indicesUnhandledOld.end(); /*Do nothing */){
+
+                regionToCompare = &regionLastFrame[*lastFrameIndex];
+
+                // A new Region from the current Frame for the Meta Region
+                if(Region::regionsIntersect(*regionToCompare, Region(currentMetaRegion.area))
+                   || Region::regionsInRelativeProximity(*regionToCompare, Region(currentMetaRegion.area), 10)){ // TODO Num of frames passed is magic literal
+                    //if((regionToCompare->coordinates & currentMetaRegion.area).area() > 0){
+
+                    areaUnchanged = false;
+
+                    currentMetaRegion.area |= currentRegion->coordinates;
+                    currentMetaRegion.metaOldRegions.push_back(& regionLastFrame[* lastFrameIndex]);
+
+                    indicesUnhandledOld.erase(lastFrameIndex);
+
+                }
+                else{ // Only increase iterator if no Element was deleted.
+                    ++lastFrameIndex;
+                }
+            }
         }
 
     }
@@ -437,9 +492,19 @@ vector<MetaRegion> RegionTracker::calcMetaRegions() {
     for(Region & region:regionLastFrame){
         Region * r = & region;
         if(associatedMRFound.count(r) == 0)
+
             addToOutOfSight(r);
     }
 
+    for(MetaRegion const & mr1: metaRegions){
+        for(MetaRegion const & mr2: metaRegions){
+            for(Region * r1: mr1.metaOldRegions){
+                for(Region * r2: mr2.metaNewRegions){
+                    assert(r1->playerInRegion != r2->playerInRegion);
+                }
+            }
+        }
+    }
     int tmp = 0;
     for(MetaRegion const & mr : metaRegions) {
         if(mr.metaNewRegions.size() != 1 || mr.metaOldRegions.size() != 1){
@@ -699,6 +764,7 @@ void RegionTracker::interpretMetaRegions(vector<MetaRegion> & mr) {
 
         if(metaRegion.metaNewRegions.size() == 1 && metaRegion.metaOldRegions.size() == 1){
             metaRegion.metaNewRegions[0]->playerInRegion = metaRegion.metaOldRegions[0]->playerInRegion;
+            deleteFromOutOfSight(metaRegion.metaNewRegions[0]->playerInRegion);
         }
         else if(metaRegion.metaNewRegions.empty()){
             for(Region * region: metaRegion.metaOldRegions){
@@ -791,7 +857,7 @@ void RegionTracker::deleteFromOutOfSight(FootballPlayer * searchFor) {
 void RegionTracker::addToOutOfSight(Region * regionPtr) {
 
     for(Region * region: outOfSightRegions) {
-        if (region->playerInRegion->identifier == regionPtr->playerInRegion->identifier) return;
+        if (region->playerInRegion == regionPtr->playerInRegion) return;
     }
     assert(regionPtr->coordinates.area() != 0);
 
