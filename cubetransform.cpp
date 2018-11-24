@@ -27,7 +27,7 @@ float faceTransform[6][2] = {
 };
 
 
-void createCubeMapFace(Mat  &in, Mat &face,
+void createCubeMapFace(Mat const &in, Mat &face,
                               int faceId, const int width,
                               const int height) {
 
@@ -66,7 +66,7 @@ void createCubeMapFace(Mat  &in, Mat &face,
           INTER_LINEAR, BORDER_CONSTANT, Scalar(0, 0, 0));
 }
 
-void mapRectangleToPanorama(Mat & inFrame,  int faceId,  int width,  int height, const Rect2d &  inRect, Rect & outRect ){
+void mapRectangleToPanorama(Mat const & inFrame,  int faceId,  int width,  int height, const Rect2d &  inRect, Rect & outRect ){
 
     float top_adr = 0;
     float left_adr = 0;
@@ -100,7 +100,7 @@ void mapRectangleToPanorama(Mat & inFrame,  int faceId,  int width,  int height,
 
 }
 
-void getPanoramaCoords( Mat & in, int faceId,  int width,  int height,
+void getPanoramaCoords( Mat const & in, int faceId,  int width,  int height,
                                int x, int y,
                                float * u_ptr, float* v_ptr){
 
@@ -181,7 +181,7 @@ void getPanoramaCoords( Mat & in, int faceId,  int width,  int height,
 }
 
 
-void cubeNet( Mat & panorama, Mat & cubeNet){
+void cubeNet( Mat const & panorama, Mat & cubeNet){
 
     CV_Assert(panorama.depth() == CV_8U);
 

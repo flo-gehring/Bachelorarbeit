@@ -18,6 +18,9 @@
 #include "tracking.h"
 #include "opencv_tracking.h"
 
+#include "PanoramaTracking.h"
+#include "PanoramaTrackingImplementations.h"
+
 using namespace cv;
 using namespace dnn;
 using namespace std;
@@ -42,6 +45,16 @@ int main(int argc, char *argv[]) {
     VideoCapture vc(video_path);
 
     // MatDetector matDetector;
+
+    YOLOWrapper yw;
+    CubeMapProjector cmp;
+
+    PanoramaTracking pt(&yw, "TLD", &cmp);
+
+    pt.trackVideo(video_path);
+
+
+
 
     string trackers[] = {
             //"GOTURN",
