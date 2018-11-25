@@ -19,6 +19,7 @@
 #include <cstring>
 #include <ctime>
 #include <numeric>
+#include <cmath>
 #include <iomanip>
 #include <stdio.h>
 #include <unordered_set>

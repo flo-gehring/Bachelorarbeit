@@ -42,19 +42,10 @@ int main(int argc, char *argv[]) {
     stringstream conv;
     char * video_path = argv[5];
 
+    RegionTracker rt;
+    rt.workOnFile(video_path);
+
     VideoCapture vc(video_path);
-
-    // MatDetector matDetector;
-
-    YOLOWrapper yw;
-    CubeMapProjector cmp;
-
-    PanoramaTracking pt(&yw, "TLD", &cmp);
-
-    pt.trackVideo(video_path);
-
-
-
 
     string trackers[] = {
             //"GOTURN",
@@ -77,8 +68,7 @@ int main(int argc, char *argv[]) {
         trackVideo(video_path, tracker , trackers[i], matDetector);
     }
     */
-     RegionTracker rt;
-     rt.workOnFile(video_path);
+
 
 
 /*

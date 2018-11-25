@@ -7,7 +7,6 @@
 
 
 
-
 // TODO: Save Information about every Player in their Objects
 
 // TODO: Velocity information for better prediction
@@ -202,7 +201,6 @@ void RegionTracker::workOnFile(char *filename) {
 
     initialize(frame);
 #undef SHOW
-
 #ifdef SHOW
     const char * windowName = "Occlusion Tracker";
     namedWindow(windowName);
@@ -1220,6 +1218,13 @@ double deltaECIE94(unsigned char L1, char a1, char b1, unsigned char L2, char a2
             pow((deltaC / (kc * SC)),2 ) +
             pow(deltaH / (kh * SH), 2)
             );
+
+    // Nan is the result of two values with minimal difference being compared. (eg (218, -122,-122) and (220, -123, -123))
+    // The fault lies in deltaH, because then deltaA = deltaB = 1 and deltaC = 1.4141 = sqrt(2) which will result in a
+    // negativ root being calculated because of insufficient floating Point precision.
+    if(isnan(deltaE94)){
+        deltaE94 = 0;
+    }
 
     return deltaE94;
 
