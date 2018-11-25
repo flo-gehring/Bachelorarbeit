@@ -100,13 +100,24 @@ public:
 
 class RegionTracker{
 public:
+
+    RegionTracker();
+    RegionTracker(const char * aoiFilePath);
+    void setAOIFile(const char * aoiFilePath);
+
     int initialize(Mat frame);
     bool update(Mat frame);
 
-    void workOnFile(char * filename);
+    void trackVideo(char *filename);
 
     virtual ~RegionTracker();
+
+
     Mat matCurrentFrame;
+
+    FILE * roiData;
+    FILE * debugData;
+
 
 protected:
 
@@ -114,6 +125,8 @@ protected:
     void interpretMetaRegions(vector<MetaRegion> & mr);
     void assignRegions(MetaRegion  & metaRegion);
     FootballPlayer * createNewFootballPlayer(Rect const &);
+    vector<Rect> detectOnFrame(Mat  & frame);
+
 
     /*
      * Factory Methods: Get Regions etc.
@@ -123,16 +136,9 @@ protected:
     void deleteFromOutOfSight(FootballPlayer *);
     void addToOutOfSight(Region *);
 
-
-    vector<Rect> detectOnFrame(Mat  & frame);
+    // Output Methods
     void drawOnFrame(Mat frame, vector<MetaRegion> const & mr);
-
-
-    double areaThreshold = 0.3;
-
-    static const int matrixDimensions = 22;
-    unsigned short  matrix[matrixDimensions][matrixDimensions];
-
+    void printInfo(vector<MetaRegion> const &);
 
     vector<Region *> outOfSightRegions;
     vector<Region *> noMatchFound;
@@ -147,8 +153,7 @@ protected:
     int objectCounter = 0;
     int currentFrame = 0;
 
-    FILE * roiData;
-    FILE * debugData;
+
 
 
 

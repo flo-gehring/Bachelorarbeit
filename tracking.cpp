@@ -6,35 +6,9 @@
 #include <set>
 
 
-
-// TODO: Save Information about every Player in their Objects
-
 // TODO: Velocity information for better prediction
 
-// TODO: Save Information about Regions and so on in File
 
-void printMatrix(unsigned  short mat[][22]){
-    int rowsToPrint = 13;
-
-    cout << endl << " ";
-    for(int i = 0; i < rowsToPrint; ++i) cout << i;
-    cout << endl;
-    for(int row = 0; row < rowsToPrint; ++row){
-        cout << row;
-        for(int col = 0; col < rowsToPrint; ++col){
-
-            if(mat[row][col] != 0){
-                cout << "1";
-            }
-            else{
-                cout << " ";
-            }
-
-        }
-        cout << endl;
-    }
-
-}
 
 /*
  * Initializes the Tracker.
@@ -42,8 +16,7 @@ void printMatrix(unsigned  short mat[][22]){
  */
 int RegionTracker::initialize(Mat frame) {
 
-    roiData = fopen("roidata.txt", "w");
-    debugData = fopen("debugdata.txt", "w");
+
 
     currentFrame = 0;
     matCurrentFrame = frame;
@@ -105,13 +78,12 @@ bool RegionTracker::update(Mat frame) {
         for (Region const & r2 : regionsNewFrame) assert(r1->playerInRegion != r2.playerInRegion);
     }
 
+
+
     for(Region & newRegion: regionsNewFrame) newRegion.updatePlayerInRegion(currentFrame);
 
-    /*
-    calcMatrix();
+    printInfo(vectorMetaRegion);
 
-    interpretMatrix();
-     */
 
     return false;
 }
@@ -183,7 +155,7 @@ void RegionTracker::drawOnFrame(Mat frame, vector<MetaRegion> const & metaRegion
     }
 }
 
-void RegionTracker::workOnFile(char *filename) {
+void RegionTracker::trackVideo(char *filename) {
 
     VideoCapture video(filename);
     Mat frame, resizedFrame;
@@ -225,11 +197,7 @@ void RegionTracker::workOnFile(char *filename) {
 
     while(! frame.empty()){
         waitKey(30);
-        #ifdef DEBUG
-        fprintf(debugData, "----------------------\n");
-        fprintf(debugData, "Frame %i: \n", frameCounter+1);
-        printMatrix(matrix);
-        #endif
+
         cout << "Frame No.: "<< frameCounter << endl;
         matCurrentFrame = frame;
 
@@ -841,8 +809,6 @@ void RegionTracker::interpretMetaRegions(vector<MetaRegion> & mr) {
 
         rectangle(matCurrentFrame, metaRegion1.area, Scalar(255,0,0), 1 );
     }
-
-
 }
 
 /*
@@ -876,6 +842,64 @@ FootballPlayer *RegionTracker::createNewFootballPlayer(Rect const & coordinates)
     ++objectCounter;
     FootballPlayer * fp = new FootballPlayer(coordinates, currentFrame, string(to_string(objectCounter)));
     return fp;
+}
+
+
+bool playerInRegionVector(FootballPlayer * fp, vector<Region> const & vr){
+
+    for(Region const & r: vr) if (fp == r.playerInRegion) return true;
+
+    return false;
+
+
+}
+
+void RegionTracker::printInfo(vector<MetaRegion> const & metaRegions) {
+
+
+    FootballPlayer * fp;
+    Rect  * coordinates;
+    for(Region const & region:regionsNewFrame){
+        fp = region.playerInRegion;
+        coordinates = & fp->coordinates.back();
+        fprintf(roiData, "%i;%s;%i;%i;%i;%i\n", currentFrame, fp->identifier.c_str(), coordinates->x, coordinates->y, coordinates->width, coordinates->height);
+    }
+
+    for(MetaRegion const & metaRegion: metaRegions){
+        for(Region * regionInMeta : metaRegion.metaNewRegions){
+            fp = regionInMeta->playerInRegion;
+            if(! playerInRegionVector(fp, regionsNewFrame)){
+                fprintf(roiData, "%i;%s;%i;%i;%i;%i\n", currentFrame, fp->identifier.c_str(),
+                        regionInMeta->coordinates.x,
+                        regionInMeta->coordinates.y,
+                        regionInMeta->coordinates.width,
+                        regionInMeta->coordinates.height);
+
+            }
+        }
+    }
+}
+
+
+
+void RegionTracker::setAOIFile(const char *aoiFilePath) {
+
+    if(roiData != nullptr){
+        fclose(roiData);
+    }
+
+    roiData = fopen(aoiFilePath, "w");
+
+}
+
+RegionTracker::RegionTracker(const char *aoiFilePath) {
+
+    roiData = fopen(aoiFilePath, "w");
+}
+
+RegionTracker::RegionTracker() {
+    roiData = fopen("roidata.txt", "w");
+    debugData = fopen("debugdata.txt", "w");
 }
 
 

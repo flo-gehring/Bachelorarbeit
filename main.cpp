@@ -43,7 +43,7 @@ int main(int argc, char *argv[]) {
     char * video_path = argv[5];
 
     RegionTracker rt;
-    rt.workOnFile(video_path);
+    rt.trackVideo(video_path);
 
     VideoCapture vc(video_path);
 
