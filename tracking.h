@@ -50,7 +50,7 @@ public:
     /*
      * The following Data will be (hopefully) usefull in identifying the Player after occlusion.
      */
-    int x_vel, y_vel; // "Velocity in Pixels per frame"
+    double x_vel, y_vel; // "Velocity in Pixels per frame"
     Mat hist; // Histogramm of the Player when he was first detected.
     Mat bgrShirtColor;
 };
@@ -72,7 +72,7 @@ public:
     static bool regionsInRelativeProximity(Region const & r1, Region const &r2, int framesPassed);
     void createColorProfile(Mat const & frame);
 
-    void updatePlayerInRegion(const Region * oldRegion, int frameNum);
+    void updatePlayerInRegion(int frameNum);
 
     /* Calcs the k-mean for colorCount colors and returns them converted into the L*A*B color space.
      * Side effect: sets colorInformation property.
@@ -124,7 +124,7 @@ protected:
 
 
     vector<Rect> detectOnFrame(Mat  & frame);
-    void drawOnFrame(Mat frame);
+    void drawOnFrame(Mat frame, vector<MetaRegion> const & mr);
 
 
     double areaThreshold = 0.3;
@@ -151,6 +151,8 @@ protected:
 
 
 
+
+
 };
 
 void textAboveRect(Mat frame, Rect rect, string text);
@@ -167,4 +169,5 @@ double deltaECIE94(unsigned char L1, char  a1, char b1, unsigned char L2, char a
  */
 void helperBGRKMean(Mat const &frame, int clusterCount, Mat &labels, Mat &centers);
 
+// void optimizeWeightSelection(int rows, int cols, double * weightMatrix, int * selected)
 #endif //PANORAMA2CUBEMAP_TRACKING_H

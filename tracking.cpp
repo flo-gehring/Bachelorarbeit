@@ -5,7 +5,6 @@
 #include "tracking.h"
 #include <set>
 
-#define SHOW
 
 
 
@@ -14,13 +13,6 @@
 // TODO: Velocity information for better prediction
 
 // TODO: Save Information about Regions and so on in File
-
-// TODO: Save color Info about the Region and intergrate into assignment process.
-// -> Also in the Player? -> T-Shirt color.
-
-// TODO! Make outOfSightRegions a vector of Pointers, so that when resolving addresses!
-
-// TODO: Performance Consideration: Don't check upper and lower cubeside.
 
 void printMatrix(unsigned  short mat[][22]){
     int rowsToPrint = 13;
@@ -110,6 +102,11 @@ bool RegionTracker::update(Mat frame) {
 
     vector<MetaRegion> vectorMetaRegion = calcMetaRegions();
     interpretMetaRegions(vectorMetaRegion);
+    for(Region * r1:outOfSightRegions){
+        for (Region const & r2 : regionsNewFrame) assert(r1->playerInRegion != r2.playerInRegion);
+    }
+
+    for(Region & newRegion: regionsNewFrame) newRegion.updatePlayerInRegion(currentFrame);
 
     /*
     calcMatrix();
@@ -139,14 +136,18 @@ vector<Rect> RegionTracker::detectOnFrame(Mat  & frame) {
         createCubeMapFace(frame, face, faceId, sideLength, sideLength);
         darknetDetector.detect_and_display(face);
 
-        for(auto detectedObjects = darknetDetector.found.begin();
-        detectedObjects != darknetDetector.found.end(); ++detectedObjects){
+        // We usually dont need top and bottom, this also increases performance massively,
+        // because the bb of the cameraman was rather large, which slowed down the k-mean Algorithm.
+        if( faceId != 5 && faceId != 6) {
+            for (auto detectedObjects = darknetDetector.found.begin();
+                 detectedObjects != darknetDetector.found.end(); ++detectedObjects) {
 
-            mapRectangleToPanorama(frame, faceId, sideLength, sideLength, (* detectedObjects).rect, panoramaCoords);
+                mapRectangleToPanorama(frame, faceId, sideLength, sideLength, (*detectedObjects).rect, panoramaCoords);
 
-            tmpDetected.push_back(panoramaCoords);
-            scores.push_back((*detectedObjects).prob);
+                tmpDetected.push_back(panoramaCoords);
+                scores.push_back((*detectedObjects).prob);
 
+            }
         }
     }
     // Perfrorm NMS on detected Recangles and copy accepted rects to detected
@@ -159,7 +160,7 @@ vector<Rect> RegionTracker::detectOnFrame(Mat  & frame) {
 
 }
 
-void RegionTracker::drawOnFrame(Mat frame) {
+void RegionTracker::drawOnFrame(Mat frame, vector<MetaRegion> const & metaRegions) {
     for (Region & r: regionsNewFrame){
         string id;
         id = r.playerInRegion->identifier;
@@ -167,6 +168,19 @@ void RegionTracker::drawOnFrame(Mat frame) {
         textAboveRect(frame, r.coordinates, id);
         rectangle(frame, r.coordinates, Scalar(0, 0, 255), 2);
 
+    }
+
+    for(MetaRegion const & mr : metaRegions){
+        string players;
+        rectangle(frame, mr.area, Scalar(255, 0, 0), 2);
+        for(Region * region : mr.metaOldRegions){
+            players.append(region->playerInRegion->identifier);
+            players.append(", ");
+        }
+        if(players.length() != 0)
+            players.erase(players.size() - 2, 2);
+        putText(frame, players, Point(mr.area.x , mr.area.y + mr.area.height + 20), FONT_HERSHEY_PLAIN, 3, Scalar(255, 0, 0, 2));
+        players.clear();
     }
 }
 
@@ -187,18 +201,20 @@ void RegionTracker::workOnFile(char *filename) {
     }
 
     initialize(frame);
+#undef SHOW
+
 #ifdef SHOW
     const char * windowName = "Occlusion Tracker";
     namedWindow(windowName);
     resize(frame, resizedFrame, Size(1980, 1020));
     imshow(windowName, resizedFrame);
 #else
-    VideoWriter vw("darknetTracker.mp4", VideoWriter::fourcc('M', 'J', 'P', 'G'),
+    VideoWriter vw("darknetTracker_meta.mp4", VideoWriter::fourcc('M', 'J', 'P', 'G'),
                    video.get(CAP_PROP_FPS),
                    frame.size(), true);
 #endif
 
-    drawOnFrame(frame);
+    drawOnFrame(frame, vector<MetaRegion>());
 
     time_t timeStart = time(0);
     float avgFrameRate = 0;
@@ -206,6 +222,7 @@ void RegionTracker::workOnFile(char *filename) {
     int frameCounter = 0;
 
     video >> frame;
+
 
 
     while(! frame.empty()){
@@ -220,13 +237,8 @@ void RegionTracker::workOnFile(char *filename) {
 
         update(frame);
 
-        /* vector<MetaRegion> mr = calcMetaRegions();
-        for(MetaRegion const & metaRegion : mr){
-         rectangle(frame, metaRegion.area, Scalar(255, 0, 0), 2);
-        }
-         */
+        vector<MetaRegion> mr = calcMetaRegions();
 
-         int counter = 0;
         #ifdef DEBUG
         cout << "Updated Frame " << frameCounter << endl;
         #endif
@@ -248,8 +260,7 @@ void RegionTracker::workOnFile(char *filename) {
         }
 
 
-        drawOnFrame(frame);
-
+        drawOnFrame(frame, mr);
 
     #ifdef SHOW
          resize(frame, resizedFrame, Size(1980, 1020));
@@ -292,7 +303,7 @@ RegionTracker::~RegionTracker() {
 }
 
 
-bool helperOutOfSightInMeta(MetaRegion & mr, vector<Region *> & outOfSight, unordered_set<Region *> alreadyFound){
+bool helperOutOfSightInMeta(MetaRegion & mr, vector<Region *> & outOfSight, unordered_set<Region *> alreadyFound, int currentFrame){
     bool areaUnchanged = true;
     Rect commonArea;
     bool regionInMeta = false;
@@ -308,8 +319,10 @@ bool helperOutOfSightInMeta(MetaRegion & mr, vector<Region *> & outOfSight, unor
 
         regionInMeta = search(mr, region);
 
-        if(Region::regionsInRelativeProximity(*region, Region(mr.area), 10) && ! regionInMeta &&
-        alreadyFound.find(region) != alreadyFound.end()){ // TODO Num of frames passed is magic literal
+        int framesDifference = currentFrame - region->playerInRegion->frames.back();
+
+        if(Region::regionsInRelativeProximity(*region, Region(mr.area), framesDifference) && ! regionInMeta &&
+       alreadyFound.count(region) == 0){ // TODO Num of frames passed is magic literal
 
             areaUnchanged = false;
             mr.area |= region->coordinates;
@@ -326,7 +339,7 @@ bool helperOutOfSightInMeta(MetaRegion & mr, vector<Region *> & outOfSight, unor
  * Iterates Vector and puts matching Regions into the Meta Region.
  * Returns if the area has changed (For now this is iff a region was added).
  */
-bool helperRegionsInMeta(MetaRegion & mr, vector<Region> & vectorOfRegions, unordered_set<Region *> & regionFound){
+bool helperRegionsInMeta(MetaRegion & mr, vector<Region> & vectorOfRegions, unordered_set<Region *> & regionFound, int currentFrame){
 
     bool areaUnchanged = true;
     Rect commonArea;
@@ -338,12 +351,18 @@ bool helperRegionsInMeta(MetaRegion & mr, vector<Region> & vectorOfRegions, unor
         for(Region * r_ptr: mr.metaNewRegions) if(r_ptr == &r) return true;
         return false;
     };
+
+
     for(Region & region : vectorOfRegions){
         commonArea = region.coordinates & mr.area;
 
         regionInMeta = search(mr, region);
+        int framesDifference =   currentFrame - region.playerInRegion->frames.back();
 
-        if(Region::regionsInRelativeProximity(region, Region(mr.area), 10) && ! regionInMeta ){ // TODO Num of frames passed is magic literal
+        //if(regionFound.count(&region) != 0) break; // Region was already handled in a different MetaRegion.
+
+
+        if(Region::regionsInRelativeProximity(region, Region(mr.area), 10) && ! regionInMeta ){
 
             areaUnchanged = false;
             mr.area |= region.coordinates;
@@ -356,6 +375,8 @@ bool helperRegionsInMeta(MetaRegion & mr, vector<Region> & vectorOfRegions, unor
 }
 
 
+
+
 /*
  * Tries to determine some "Meta Regions" by grouping all the Regions in physical proximity together.
  * If a region from the last frame has no new region at all nearby, they will be marked as out of sight.
@@ -365,9 +386,15 @@ vector<MetaRegion> RegionTracker::calcMetaRegions() {
     vector<int> indicesUnhandledRegions(regionsNewFrame.size());
     std::iota(std::begin(indicesUnhandledRegions),std::end(indicesUnhandledRegions), 0);
 
+    vector<int> indicesUnhandledOutOfSight(outOfSightRegions.size());
+    std::iota(std::begin(indicesUnhandledOutOfSight), std::end(indicesUnhandledOutOfSight), 0);
+
+    vector<int> indicesUnhandledOld(regionLastFrame.size());
+    std::iota(std::begin(indicesUnhandledOld), std::end(indicesUnhandledOld),0);
+
     Region * currentRegion;
     Region * regionToCompare;
-    bool areaUnchanged = false;
+    bool areaUnchanged;
 
     vector<MetaRegion> metaRegions;
 
@@ -395,19 +422,20 @@ vector<MetaRegion> RegionTracker::calcMetaRegions() {
         while(!areaUnchanged){
 
             areaUnchanged = true;
-
+            // TODO Refactor
             for(auto newRegionIndex = indicesUnhandledRegions.begin();
             newRegionIndex != indicesUnhandledRegions.end(); /*Do nothing */){
 
                 regionToCompare = &regionsNewFrame[*newRegionIndex];
 
                 // A new Region from the current Frame for the Meta Region
-                if(Region::regionsInRelativeProximity(*regionToCompare, Region(currentMetaRegion.area), 10)){ // TODO Num of frames passed is magic literal
+                if(Region::regionsIntersect(*regionToCompare, Region(currentMetaRegion.area))
+                || Region::regionsInRelativeProximity(*regionToCompare, Region(currentMetaRegion.area), 10)){ // TODO Num of frames passed is magic literal
                 //if((regionToCompare->coordinates & currentMetaRegion.area).area() > 0){
 
                     areaUnchanged = false;
 
-                    currentMetaRegion.area |= currentRegion->coordinates;
+                    currentMetaRegion.area |= regionToCompare->coordinates;
                     currentMetaRegion.metaNewRegions.push_back(& regionsNewFrame[* newRegionIndex]);
 
                     indicesUnhandledRegions.erase(newRegionIndex);
@@ -418,9 +446,57 @@ vector<MetaRegion> RegionTracker::calcMetaRegions() {
                 }
             }
 
-            areaUnchanged &= helperRegionsInMeta(currentMetaRegion, regionLastFrame, associatedMRFound);
-            areaUnchanged &= helperOutOfSightInMeta(currentMetaRegion, outOfSightRegions, outOfSightFound);
+            for(auto outOfSightIndex = indicesUnhandledOutOfSight.begin();
+                outOfSightIndex!= indicesUnhandledOutOfSight.end(); /*Do nothing */){
 
+                regionToCompare = outOfSightRegions[*outOfSightIndex];
+
+
+
+                // A new Region from the current Frame for the Meta Region
+                if(Region::regionsIntersect(*regionToCompare, Region(currentMetaRegion.area))
+                   || Region::regionsInRelativeProximity(*regionToCompare, Region(currentMetaRegion.area), 10)){ // TODO Num of frames passed is magic literal
+                    //if((regionToCompare->coordinates & currentMetaRegion.area).area() > 0){
+
+                    areaUnchanged = false;
+
+                    currentMetaRegion.area |= regionToCompare->coordinates;
+                    currentMetaRegion.metaOldRegions.push_back(outOfSightRegions[* outOfSightIndex]);
+
+                    outOfSightFound.insert(outOfSightRegions[*outOfSightIndex]);
+
+                    indicesUnhandledOutOfSight.erase(outOfSightIndex);
+
+                }
+                else{ // Only increase iterator if no Element was deleted.
+                    ++outOfSightIndex;
+                }
+            }
+
+            for(auto lastFrameIndex = indicesUnhandledOld.begin();
+                lastFrameIndex != indicesUnhandledOld.end(); /*Do nothing */){
+
+                regionToCompare = &regionLastFrame[*lastFrameIndex];
+
+                // A new Region from the current Frame for the Meta Region
+                if(Region::regionsIntersect(*regionToCompare, Region(currentMetaRegion.area))
+                   || Region::regionsInRelativeProximity(*regionToCompare, Region(currentMetaRegion.area), 10)){ // TODO Num of frames passed is magic literal
+                    //if((regionToCompare->coordinates & currentMetaRegion.area).area() > 0){
+
+                    areaUnchanged = false;
+
+                    currentMetaRegion.area |= regionToCompare->coordinates;
+                    currentMetaRegion.metaOldRegions.push_back(& regionLastFrame[* lastFrameIndex]);
+
+                    associatedMRFound.insert( &regionLastFrame[* lastFrameIndex]);
+
+                    indicesUnhandledOld.erase(lastFrameIndex);
+
+                }
+                else{ // Only increase iterator if no Element was deleted.
+                    ++lastFrameIndex;
+                }
+            }
         }
 
     }
@@ -428,8 +504,10 @@ vector<MetaRegion> RegionTracker::calcMetaRegions() {
     for(Region & region:regionLastFrame){
         Region * r = & region;
         if(associatedMRFound.count(r) == 0)
+
             addToOutOfSight(r);
     }
+
 
     int tmp = 0;
     for(MetaRegion const & mr : metaRegions) {
@@ -439,6 +517,9 @@ vector<MetaRegion> RegionTracker::calcMetaRegions() {
         }
         ++tmp;
     }
+
+    for(Region * r : outOfSightFound) assert(outOfSightFound.count(r) <= 1);
+    for(Region * r: associatedMRFound) assert(associatedMRFound.count(r) <= 1);
     return metaRegions;
 }
 
@@ -466,12 +547,14 @@ double calcWeightedSimiliarity(Region  * r1, Region *r2, Rect area, Mat frame){
     //Histogram
     // http://answers.opencv.org/question/8154/question-about-histogram-comparison-return-value/
     // Return Value of CV_COMP_CORRELL: -1 is worst, 1 is best. -> Map to  [0,1]
-    Mat hist1, hist2;
+    /* Mat hist1, hist2;
     histFromRect(frame, r1->coordinates, hist1);
     histFromRect(frame, r2->coordinates, hist2);
 
     similarityHistogramm = compareHist(hist1, hist2, CV_COMP_CORREL);
     similarityHistogramm = (similarityHistogramm / 2) + 0.5; // Map [-1,1] to [0,1]
+     */
+    similarityHistogramm = 0;
     
     // Color
     // CIE94 Formula. If the difference has a value greater than 100, similarityColor turns negativ.
@@ -489,9 +572,6 @@ double calcWeightedSimiliarity(Region  * r1, Region *r2, Rect area, Mat frame){
 
     return similaritySize + similarityPosition + similarityHistogramm + similarityColor;
 }
-bool regionsMatch(Region * r1, Region * r2){
-    return false;
-}
 
 
 /*
@@ -501,10 +581,17 @@ bool regionsMatch(Region * r1, Region * r2){
  */
 void RegionTracker::assignRegions( MetaRegion & metaRegion) {
 
+    // Create and Initalize Array filled with zeroes.
     int * matching =  new int[metaRegion.metaNewRegions.size() * metaRegion.metaOldRegions.size()];
+    for(int it = 0; it < metaRegion.metaOldRegions.size() * metaRegion.metaNewRegions.size(); ++it){
+        matching[it] = 0;
+    }
+
+
     metaRegion.matchOldAndNewRegions(matCurrentFrame, matching);
 
-#ifdef DEBUGPRINT
+#define DEBUGPRINT
+    #ifdef DEBUGPRINT
     // Print matching
             for(int rowCounter = 0; rowCounter < metaRegion.metaOldRegions.size(); ++rowCounter){
                 for(int colCounter = 0; colCounter < metaRegion.metaNewRegions.size(); ++colCounter){
@@ -539,6 +626,84 @@ void RegionTracker::assignRegions( MetaRegion & metaRegion) {
     delete[] matching;
 }
 
+/*
+ * Get the selection of weights which has the highest possible Sum.
+ * Constraint: There can be at most one "1" in every row and column.
+ * Bruteforce solution, as the arrays are fairly small.
+ */
+void optimizeWeightSelection(int rows, int cols, double * const weightMatrix, int * selected){
+    short selectedCells[rows];
+    short temp_selectedCells[rows];
+
+    for(int i = 0; i < rows; ++i){
+        selectedCells[i] = -2;
+        temp_selectedCells[i] = -2;
+    }
+    bool finished = false;
+    double temp_Weight;
+    double maxWeight = 0;
+
+    int currentRow = 0;
+
+    while(!finished){
+
+        ++temp_selectedCells[currentRow];
+
+        if(temp_selectedCells[currentRow] == cols){ // Last Column of Row was checked
+            // Check if loop is finished
+            finished = true;
+            for(int i = 0; i < rows; ++i){
+                finished &= temp_selectedCells[i] >= cols-1;
+            }
+            if(! finished){
+                temp_selectedCells[currentRow] = -2;
+                --currentRow;
+            }
+            continue;
+        }
+        else if(currentRow != rows-1 ){ // Last Column, combination was checked in last iteration.
+            ++currentRow;
+            continue;
+        }
+        else{ // Last Row, increase counter and  check new selection
+
+            // Check if Selection is valid and Calc selected Weight
+            bool selectionValid = true;
+            temp_Weight = 0;
+            for(int i = 0; i < rows; ++i){
+                for(int r = i+1; r < rows; ++r){
+                    selectionValid &= ((temp_selectedCells[i] != temp_selectedCells[r]) || temp_selectedCells[i] == -1);
+                }
+
+                if(temp_selectedCells[i] > -1){
+                    temp_Weight += weightMatrix[(cols * i) + temp_selectedCells[i]];
+                }
+            }
+
+            // If new Maxmium was found,
+            if(selectionValid && temp_Weight > maxWeight){
+                maxWeight = temp_Weight;
+                for(int i = 0; i < rows; ++i)
+                    selectedCells[i] = temp_selectedCells[i];
+            }
+
+        }
+        // Check if loop is finished
+        finished = true;
+        for(int i = 0; i < rows; ++i){
+            finished &= temp_selectedCells[i] == cols-1;
+        }
+
+
+    }
+
+    for(int i = 0; i < rows; ++i){
+        if(selectedCells[i] != -1){
+            selected[(i * cols) + selectedCells[i]] = 1;
+        }
+    }
+}
+
 
 /*
  * Create a matrix M in which is saved which regions are the most similiar to each other.
@@ -564,6 +729,7 @@ int *  MetaRegion::matchOldAndNewRegions(Mat frame, int * matching){
     }
 
     // Print Matrix for debugging purposes
+#define P2C_SHOW_MATCHING_MATRIX
 #ifdef P2C_SHOW_MATCHING_MATRIX
     cout << std::fixed << std::setw(5) << std::setprecision(4);
 
@@ -579,38 +745,7 @@ int *  MetaRegion::matchOldAndNewRegions(Mat frame, int * matching){
 #endif
 
     // Create a matrix which shows how the Regions correspond to each other.
-    // TODO: Find a better algorithm.
-    int bestMatchingOld;
-    double weightedMax, currentWeight;
-
-    for(int colCounter = 0; colCounter < metaNewRegions.size(); ++colCounter){
-        weightedMax= -1;
-        bestMatchingOld = -1;
-        for(int rowCounter = 0; rowCounter < oldRegionSize; ++rowCounter){
-            currentWeight = matchingMatrix[(rowCounter * newRegionSize) + colCounter];
-
-
-            if(weightedMax < currentWeight){
-                // Search if there is a new region which fits the current old Region better.
-                bool bestOption = true;
-
-                for(int colCounter_1 = 0; colCounter_1 < metaNewRegions.size(); ++colCounter_1){
-                    assert(((rowCounter * newRegionSize) + colCounter_1) < metaNewRegions.size() * oldRegionSize);
-                    if (matchingMatrix[(rowCounter * newRegionSize) + colCounter_1] > currentWeight){
-                        bestOption = false;
-                        break;
-                    }
-                }
-                if(bestOption) {
-                    weightedMax = currentWeight;
-                    bestMatchingOld = rowCounter;
-                }
-            }
-        }
-        if(bestMatchingOld != -1) {
-            (*(matching + (bestMatchingOld * newRegionSize) + colCounter)) = 1;
-        }
-    }
+    optimizeWeightSelection(metaOldRegions.size(), metaNewRegions.size(), matchingMatrix, matching);
     return matching;
 }
 
@@ -636,6 +771,7 @@ void RegionTracker::interpretMetaRegions(vector<MetaRegion> & mr) {
 
         if(metaRegion.metaNewRegions.size() == 1 && metaRegion.metaOldRegions.size() == 1){
             metaRegion.metaNewRegions[0]->playerInRegion = metaRegion.metaOldRegions[0]->playerInRegion;
+            deleteFromOutOfSight(metaRegion.metaNewRegions[0]->playerInRegion);
         }
         else if(metaRegion.metaNewRegions.empty()){
             for(Region * region: metaRegion.metaOldRegions){
@@ -662,35 +798,52 @@ void RegionTracker::interpretMetaRegions(vector<MetaRegion> & mr) {
     }
 
     // Try to find a matching Region for all the Regions which did not find a Partner.
-    MetaRegion restOfTheRegions;
     Rect area;
+    unsigned char * shirtColorOld, * shirtColorNew;
+    double distance;
+    int framesPassed;
     for(Region * outOfSight : outOfSightRegions){
-        restOfTheRegions.metaOldRegions.push_back(outOfSight);
-        area |= outOfSight->coordinates;
+         shirtColorOld = outOfSight->labShirtColor;
+        for(Region * noPartner: noMatchFound){
+            shirtColorNew = noPartner->labShirtColor;
+            double deltaColor = deltaECIE94(
+                    shirtColorOld[0], shirtColorOld[1], shirtColorOld[2],
+                    shirtColorNew[0], shirtColorNew[1], shirtColorNew[2]
+
+                    );
+
+            bool colorsMatch =  deltaColor < 15;
+
+            distance = sqrt(pow(outOfSight->coordinates.y - noPartner->coordinates.y , 2) + pow(outOfSight->coordinates.x - noPartner->coordinates.x ,2));
+            framesPassed = currentFrame - outOfSight->playerInRegion->frames.back();
+            bool distancePlausible = distance < framesPassed * (noPartner->coordinates.height / 6); // Rough estimate of max velocity. TODO This, better.
+
+
+            if(colorsMatch && distancePlausible) {
+                noPartner->playerInRegion = outOfSight->playerInRegion;
+                deleteFromOutOfSight(outOfSight->playerInRegion);
+                break; // No double assignments.
+            }
+        }
     }
-    for(Region * noPartner: noMatchFound){
-        restOfTheRegions.metaNewRegions.push_back(noPartner);
-        area |= noPartner->coordinates;
-    }
-    restOfTheRegions.area = area;
-    if(! ( restOfTheRegions.metaNewRegions.empty() || restOfTheRegions.metaOldRegions.empty()))
-        assignRegions(restOfTheRegions);
+
 
     // For the Regions still not having an assigned Player, create a new one
     for(Region * noAssignedPlayer: noMatchFound){
         if(noAssignedPlayer->playerInRegion == nullptr){
             noAssignedPlayer->playerInRegion = createNewFootballPlayer(noAssignedPlayer->coordinates);
+            cout << " New Player created: " << noAssignedPlayer->playerInRegion->identifier << endl;
+            cout << "Out of sight size: " << outOfSightRegions.size() << endl;
         }
     }
 
 
-#ifdef UNDEF
     //Draw the meta Regions
     for(MetaRegion const & metaRegion1: mr ){
 
         rectangle(matCurrentFrame, metaRegion1.area, Scalar(255,0,0), 1 );
     }
-#endif
+
 
 }
 
@@ -711,7 +864,8 @@ void RegionTracker::deleteFromOutOfSight(FootballPlayer * searchFor) {
 void RegionTracker::addToOutOfSight(Region * regionPtr) {
 
     for(Region * region: outOfSightRegions) {
-        if (region->playerInRegion->identifier == regionPtr->playerInRegion->identifier) return;
+        if (region->playerInRegion == regionPtr->playerInRegion) return;
+        assert(region->playerInRegion != regionPtr->playerInRegion);
     }
     assert(regionPtr->coordinates.area() != 0);
 
@@ -729,22 +883,22 @@ FootballPlayer *RegionTracker::createNewFootballPlayer(Rect const & coordinates)
 
 FootballPlayer::FootballPlayer(Rect coordinate, int frame, string const & identifier) {
 
-    // coordinates.emplace_back(coordinate);
+    coordinates.emplace_back(coordinate);
     frames.emplace_back(frame);
     this->identifier = string(identifier);
     hist = Mat();
+    x_vel = 0;
+    y_vel = 0;
 
 }
 
 void FootballPlayer::addPosition(Rect coordinates, int frame) {
-    this->coordinates.push_back(coordinates);
-    this->frames.push_back(frame);
+    if(frames.back() != frame) {
+        this->coordinates.emplace_back(Rect(coordinates));
+        this->frames.push_back(frame);
+    }
 }
 
-void getMiddleCoordinates(Rect const & r, int * x, int * y){
-    (*x) = r.x + r.width / 2;
-    (*y) = r.y + r.height / 2;
-}
 
 /*
  * Calc new velocity, update coordinates and frame num.
@@ -752,43 +906,34 @@ void getMiddleCoordinates(Rect const & r, int * x, int * y){
 void FootballPlayer::update(Rect const &coordinates, int frame) {
 
     int numKnownFrames = frames.size();
-    int  oldMiddleX, oldMiddleY,  newMiddleX, newMiddleY = 0; // To calc the velocity, we take the middle of the Bounding Box as spatial reference, not the top left corner.
-    int *addrOldMiddleX = &oldMiddleX;
-    int * addrOldMiddleY = &oldMiddleY;
-    int * addrNewMiddleX = & newMiddleX;
-    int * addrNewMiddleY = & newMiddleY;
-
 
     addPosition(coordinates, frame);
 
     // Get the last 5 Frames to estimate the position.
     int lookUpNFrames = 5;
 
-    auto coordinatesIterator = this->coordinates.end();
-    auto frameIterator = this->frames.end();
+    auto coordinatesIterator = this->coordinates.begin();
+    auto frameIterator = this->frames.begin();
     if(numKnownFrames < lookUpNFrames) lookUpNFrames = numKnownFrames;
 
-    Rect  & currentRect = (* coordinatesIterator);
-    Rect  & rectBefore = (* --coordinatesIterator);
-    ++coordinatesIterator;
-    while(lookUpNFrames > 0){
-        currentRect = (* coordinatesIterator);
-        rectBefore = (* --coordinatesIterator);
+    Rect & lastPosition = * coordinatesIterator;
 
-        getMiddleCoordinates(currentRect, addrNewMiddleX, addrNewMiddleY);
-        getMiddleCoordinates(rectBefore, addrOldMiddleX, addrOldMiddleY);
+    double deltaX, deltaY;
+    while(coordinatesIterator != this->coordinates.end()){
+        deltaX = lastPosition.x - coordinatesIterator->x;
+        deltaY = lastPosition.y - coordinatesIterator->y;
 
-        x_vel += newMiddleX - oldMiddleX;
-        y_vel += newMiddleY - oldMiddleY;
+        x_vel += deltaX;
+        y_vel += deltaY;
 
+        lastPosition = * coordinatesIterator;
+        ++coordinatesIterator;
 
-
-        --lookUpNFrames;
-        --frameIterator;
     }
 
-    x_vel = x_vel / (frame - (* frameIterator));
-    y_vel = y_vel / (frame - (*frameIterator));
+    x_vel = x_vel / numKnownFrames;
+    y_vel = y_vel / numKnownFrames;
+
 
 }
 
@@ -801,10 +946,9 @@ void FootballPlayer::update(Rect const &coordinates, int frame) {
 /*
  * Adds the Position of the Region and the current Frame to the tracked objects in the Region.
  */
-void Region::updatePlayerInRegion(const Region * oldRegion, int frameNum) {
+void Region::updatePlayerInRegion(int frameNum) {
 
-    playerInRegion->coordinates.emplace_back(Rect(coordinates));
-    playerInRegion->frames.push_back(frameNum);
+    playerInRegion->update(coordinates, frameNum);
 
 }
 
@@ -825,14 +969,14 @@ bool Region::regionsIntersect(const Region &r1, const Region &r2){
 
 }
 
-void estimateLocalization(Region const & r1, int framesPassed, Rect & r){
+void estimatePosition(Region const & r1, int framesPassed, Rect & r){
     int pixelPerFrame = 3;
     Rect rect1 = Rect(r1.coordinates);
     int x1, y1,width1 ,height1;
     x1 = rect1.x - (framesPassed * pixelPerFrame);
     y1 = rect1.y - (framesPassed * pixelPerFrame);
-    width1 = rect1.width + (pixelPerFrame * framesPassed);
-    height1 = rect1.height + (pixelPerFrame * framesPassed);
+    width1 = rect1.width + (2 * pixelPerFrame * framesPassed);
+    height1 = rect1.height + (2 * pixelPerFrame * framesPassed);
 
     r.x = x1;
     r.y = y1;
@@ -843,8 +987,8 @@ void estimateLocalization(Region const & r1, int framesPassed, Rect & r){
 bool Region::regionsInRelativeProximity(Region const &r1, Region const &r2, int framesPassed) {
 
     Rect estimate1, estimate2;
-    estimateLocalization(r1, framesPassed, estimate1);
-    estimateLocalization(r2, framesPassed, estimate2);
+    estimatePosition(r1, framesPassed, estimate1);
+    estimatePosition(r2, framesPassed, estimate2);
 
     return (estimate1 & estimate2).area() > 0;
 }
@@ -996,8 +1140,8 @@ void Region::createColorProfile(Mat const &frame) {
     Mat labShirtColorTemp;
     cvtColor(bgrShirtColorTemp, labShirtColorTemp, CV_BGR2Lab);
 
-    uchar * bgrColorPtr = bgrShirtColorTemp.ptr<uchar>(0);
-    uchar * labColorPtr = labShirtColorTemp.ptr<uchar>(0);
+    auto * bgrColorPtr = bgrShirtColorTemp.ptr<uchar>(0);
+    auto * labColorPtr = labShirtColorTemp.ptr<uchar>(0);
 
     for(int i = 0; i < 3; ++i){
         labShirtColor[i] = labColorPtr[i];
