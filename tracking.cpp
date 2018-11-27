@@ -27,8 +27,6 @@ int RegionTracker::initialize(Mat frame) {
     objectCounter = 0;
 
     FootballPlayer * newPlayer;
-    darknetDetector = DetectionFromFile();
-
 
     for(auto it = detectedRects.begin(); it != detectedRects.end(); ++it){
 
@@ -155,7 +153,7 @@ void RegionTracker::drawOnFrame(Mat frame, vector<MetaRegion> const & metaRegion
     }
 }
 
-void RegionTracker::trackVideo(char *filename) {
+void RegionTracker::trackVideo(const char *filename) {
 
     VideoCapture video(filename);
     Mat frame, resizedFrame;
@@ -170,19 +168,23 @@ void RegionTracker::trackVideo(char *filename) {
         cerr << "Empty video";
         exit(-1);
     }
+    const char * windowName;
+    VideoWriter vw;
 
     initialize(frame);
-#undef SHOW
-#ifdef SHOW
-    const char * windowName = "Occlusion Tracker";
-    namedWindow(windowName);
-    resize(frame, resizedFrame, Size(1980, 1020));
-    imshow(windowName, resizedFrame);
-#else
-    VideoWriter vw("darknetTracker_meta.mp4", VideoWriter::fourcc('M', 'J', 'P', 'G'),
-                   video.get(CAP_PROP_FPS),
-                   frame.size(), true);
-#endif
+    if(! saveVideo) {
+        windowName = "Occlusion Tracker";
+        namedWindow(windowName);
+        resize(frame, resizedFrame, Size(1980, 1020));
+        imshow(windowName, resizedFrame);
+    }
+    else {
+
+        vw = VideoWriter(saveVideoPath, VideoWriter::fourcc('M', 'J', 'P', 'G'),
+                       video.get(CAP_PROP_FPS),
+                       frame.size(), true);
+    }
+
 
     drawOnFrame(frame, vector<MetaRegion>());
 
@@ -205,9 +207,6 @@ void RegionTracker::trackVideo(char *filename) {
 
         vector<MetaRegion> mr = calcMetaRegions();
 
-        #ifdef DEBUG
-        cout << "Updated Frame " << frameCounter << endl;
-        #endif
          ++frameCounter;
          secondsPassed = (time(0) - timeStart);
 
@@ -228,22 +227,23 @@ void RegionTracker::trackVideo(char *filename) {
 
         drawOnFrame(frame, mr);
 
-    #ifdef SHOW
-         resize(frame, resizedFrame, Size(1980, 1020));
-         imshow(windowName, resizedFrame);
-         char c = waitKey(30);
-         bool pauseVid = c == 32; // Space
-          while(pauseVid){
-             c = waitKey(10);
-             if (c == 32) break;
-         }
-    #else
-         vw.write(frame);
-    #endif
-
-         video >> frame;
-
+    if(! saveVideo) {
+        resize(frame, resizedFrame, Size(1980, 1020));
+        imshow(windowName, resizedFrame);
+        char c = waitKey(30);
+        bool pauseVid = c == 32; // Space
+        while (pauseVid) {
+            c = waitKey(10);
+            if (c == 32) break;
         }
+    }
+    else {
+        vw.write(frame);
+    }
+
+    video >> frame;
+
+    }
 
 }
 
@@ -265,6 +265,10 @@ FootballPlayer RegionTracker::playerById(string id) {
 RegionTracker::~RegionTracker() {
     for(FootballPlayer * footballPlayer : footballPlayers){
         delete footballPlayer;
+    }
+    delete[] saveVideoPath;
+    for(Region *r : outOfSightRegions){
+        delete r;
     }
 }
 
@@ -892,14 +896,30 @@ void RegionTracker::setAOIFile(const char *aoiFilePath) {
 
 }
 
-RegionTracker::RegionTracker(const char *aoiFilePath) {
+RegionTracker::RegionTracker(const char *aoiFilePath, const char * videoPath) {
 
+    if(! videoPath){ // -> videoPath is default value nullptr.
+        saveVideo = false;
+    }
+    else{
+        saveVideo = true;
+        strcpy(saveVideoPath, videoPath);
+    }
     roiData = fopen(aoiFilePath, "w");
 }
 
 RegionTracker::RegionTracker() {
+    saveVideo = false;
     roiData = fopen("roidata.txt", "w");
     debugData = fopen("debugdata.txt", "w");
+    saveVideoPath = new char[64];
+}
+
+void RegionTracker::enableVideoSave(const char *videoFilePath) {
+
+    saveVideo = true;
+    strcpy(saveVideoPath, videoFilePath);
+
 }
 
 

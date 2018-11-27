@@ -102,13 +102,17 @@ class RegionTracker{
 public:
 
     RegionTracker();
-    RegionTracker(const char * aoiFilePath);
-    void setAOIFile(const char * aoiFilePath);
+    explicit RegionTracker(const char * aoiFilePath, const char * videoPath = nullptr);
 
+    void setAOIFile(const char * aoiFilePath);
+    void enableVideoSave(const char * videoFilePath);
+
+
+    void trackVideo(const char *filename);
     int initialize(Mat frame);
     bool update(Mat frame);
 
-    void trackVideo(char *filename);
+
 
     virtual ~RegionTracker();
 
@@ -119,7 +123,9 @@ public:
     FILE * debugData;
 
 
+
 protected:
+
 
     vector<MetaRegion> calcMetaRegions();
     void interpretMetaRegions(vector<MetaRegion> & mr);
@@ -148,15 +154,14 @@ protected:
 
     vector<FootballPlayer *> footballPlayers;
 
-    DetectionFromFile darknetDetector;
+    MatDetector darknetDetector;
 
     int objectCounter = 0;
     int currentFrame = 0;
 
 
-
-
-
+    bool saveVideo;
+    char * saveVideoPath;
 
 
 };
