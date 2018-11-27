@@ -13,13 +13,27 @@
 /*
  * Initializes the Tracker.
  * Performs the first round of detection which differs slightly from the following.
+ * Cleans up from eventual past detections.
  */
 int RegionTracker::initialize(Mat frame) {
 
+    // Clean up before tracking Players in a new video.
+    for(FootballPlayer * fp: footballPlayers) {
+        delete fp;
+    }
+    footballPlayers.clear();
 
+    regionsNewFrame.clear();
+    regionLastFrame.clear();
+
+    for (Region * r: outOfSightRegions){
+        delete r;
+    }
+    outOfSightRegions.clear(); // Cleanup complete.
 
     currentFrame = 0;
     matCurrentFrame = frame;
+
 
     // All the detected Objects will be stored as rectangles in detectedRects
     vector<Rect> detectedRects = detectOnFrame(frame);
@@ -32,7 +46,7 @@ int RegionTracker::initialize(Mat frame) {
 
         CV_Assert(it->area() != 0);
 
-        newPlayer = new FootballPlayer((*it), 1, to_string(objectCounter));
+        newPlayer = new FootballPlayer((*it), 0, to_string(objectCounter));
 
         footballPlayers.emplace_back(newPlayer);
         regionsNewFrame.emplace_back(Region(*it,  footballPlayers.back()));
@@ -496,30 +510,43 @@ vector<MetaRegion> RegionTracker::calcMetaRegions() {
 // TODO: Would it be good to make Color a "hard" criterion and just dismiss every color combination which differs too much?
 /*
  * Calculate how similiar two Regions are to each other.
- * Things taken into Consideration: Size, Histogramm, Position, Colorscheme.
+ * Things taken into Consideration: Size, (Predicted-)Position, Colorscheme.
  * The bigger the value, the more the likelihood of them representing the same area.
  */
 
-double calcWeightedSimiliarity(Region  * r1, Region *r2, Rect area, Mat frame){
+double calcWeightedSimiliarity(Region  * oldRegion, Region *newRegion, Rect area, Mat frame, int frameNum){
+
+
     double similaritySize, similarityPosition, similarityHistogramm, similarityColor;
 
     // Size
-    similaritySize = float(r1->coordinates.area()) / float(r2->coordinates.area());
+    similaritySize = float(oldRegion->coordinates.area()) / float(newRegion->coordinates.area());
     if(similaritySize > 1) similaritySize = 1 / similaritySize;
 
+    // If the Player was seen in the Last frame, take the old Position, else use the  predicted Position
     // Position
     // Compare the Position of the upper left corner, hypotenuseMetaRegion is the maximum possible distance
     // and would result in a value of zero.
+    Rect positionOldRegion;
+    if(oldRegion->playerInRegion->frames.back() == frameNum - 1){
+        positionOldRegion = oldRegion->coordinates;
+    }
+    else{
+        positionOldRegion = oldRegion->playerInRegion->predictPosition(frameNum);
+        cout << "Frame " << frameNum << endl;
+        printf("(%i, %i, %i, %i)", positionOldRegion.x, positionOldRegion.y, positionOldRegion.width, positionOldRegion.height );
+        cout << endl;
+    }
     double hypotenuseMetaRegion = sqrt(pow(area.width , 2) + pow(area.height, 2));
-    double lengthVector = sqrt(pow(r1->coordinates.x - r2->coordinates.x, 2) + pow(r1->coordinates.y - r2->coordinates.y, 2));
+    double lengthVector = sqrt(pow(positionOldRegion.x - newRegion->coordinates.x, 2) + pow(positionOldRegion.y - newRegion->coordinates.y, 2));
     similarityPosition = (hypotenuseMetaRegion - lengthVector) / hypotenuseMetaRegion;
 
     //Histogram
     // http://answers.opencv.org/question/8154/question-about-histogram-comparison-return-value/
     // Return Value of CV_COMP_CORRELL: -1 is worst, 1 is best. -> Map to  [0,1]
     /* Mat hist1, hist2;
-    histFromRect(frame, r1->coordinates, hist1);
-    histFromRect(frame, r2->coordinates, hist2);
+    histFromRect(frame, oldRegion->coordinates, hist1);
+    histFromRect(frame, newRegion->coordinates, hist2);
 
     similarityHistogramm = compareHist(hist1, hist2, CV_COMP_CORREL);
     similarityHistogramm = (similarityHistogramm / 2) + 0.5; // Map [-1,1] to [0,1]
@@ -533,8 +560,8 @@ double calcWeightedSimiliarity(Region  * r1, Region *r2, Rect area, Mat frame){
 
 
     similarityColor = deltaECIE94(
-                r1->labShirtColor[0], r1->labShirtColor[1], r1->labShirtColor[2],
-                r2->labShirtColor[0], r2->labShirtColor[1], r2->labShirtColor[2]
+                oldRegion->labShirtColor[0], oldRegion->labShirtColor[1], oldRegion->labShirtColor[2],
+                newRegion->labShirtColor[0], newRegion->labShirtColor[1], newRegion->labShirtColor[2]
         );
 
     similarityColor = (100 - similarityColor) / 100;
@@ -552,13 +579,13 @@ double calcWeightedSimiliarity(Region  * r1, Region *r2, Rect area, Mat frame){
 void RegionTracker::assignRegions( MetaRegion & metaRegion) {
 
     // Create and Initalize Array filled with zeroes.
-    int * matching =  new int[metaRegion.metaNewRegions.size() * metaRegion.metaOldRegions.size()];
+    int  matching[metaRegion.metaNewRegions.size() * metaRegion.metaOldRegions.size()];
     for(int it = 0; it < metaRegion.metaOldRegions.size() * metaRegion.metaNewRegions.size(); ++it){
         matching[it] = 0;
     }
 
 
-    metaRegion.matchOldAndNewRegions(matCurrentFrame, matching);
+    metaRegion.matchOldAndNewRegions(matCurrentFrame, matching, currentFrame);
 
 #define DEBUGPRINT
     #ifdef DEBUGPRINT
@@ -593,7 +620,7 @@ void RegionTracker::assignRegions( MetaRegion & metaRegion) {
 
         }
     }
-    delete[] matching;
+
 }
 
 /*
@@ -679,7 +706,7 @@ void optimizeWeightSelection(int rows, int cols, double * const weightMatrix, in
  * Create a matrix M in which is saved which regions are the most similiar to each other.
  * If M[i,j] == 1, then metaOldRegions[i] corresponds to metaNewRegion[j]
  */
-int *  MetaRegion::matchOldAndNewRegions(Mat frame, int * matching){
+int *  MetaRegion::matchOldAndNewRegions(Mat frame, int * matching, int frameNum){
 
     unsigned long oldRegionSize = metaOldRegions.size();
     unsigned long newRegionSize = metaNewRegions.size();
@@ -694,7 +721,7 @@ int *  MetaRegion::matchOldAndNewRegions(Mat frame, int * matching){
         for(int colCounter = 0; colCounter < metaNewRegions.size(); ++colCounter){
 
             matchingMatrix[(rowCounter * newRegionSize) + colCounter] =
-                    calcWeightedSimiliarity(currentOldRegion, metaNewRegions[colCounter], area, frame);
+                    calcWeightedSimiliarity(currentOldRegion, metaNewRegions[colCounter], area, frame, frameNum);
         }
     }
 
@@ -909,6 +936,7 @@ RegionTracker::RegionTracker(const char *aoiFilePath, const char * videoPath) {
 }
 
 RegionTracker::RegionTracker() {
+
     saveVideo = false;
     roiData = fopen("roidata.txt", "w");
     debugData = fopen("debugdata.txt", "w");
@@ -942,6 +970,47 @@ void FootballPlayer::addPosition(Rect coordinates, int frame) {
 }
 
 
+Rect FootballPlayer::predictPosition(int frameNum) {
+
+
+    if(coordinates.size() < 2)
+        return Rect(coordinates.back());
+
+    int deltaX[frames.size()];
+    int deltaY[frames.size()];
+
+    int iInc;
+    for(int i = 0; i < coordinates.size(); ++i){
+        iInc = i + 1;
+        deltaX[i] = coordinates[coordinates.size() -  iInc].x;
+        deltaY[i] = coordinates[coordinates.size() - iInc].y;
+    }
+    int numIterations = 0;
+    for(int i = 0; i < coordinates.size() - 1; ++i){
+        iInc = i + 1;
+
+        deltaX[i] = deltaX[iInc] - deltaX[i];
+        deltaY[i] = deltaY[iInc] - deltaY[i];
+        numIterations = iInc;
+        if(i > 0 &&  ((deltaX[i] * deltaX[i-1] < 0) || (deltaY[i] * deltaY[i-1] < 0))){ // Break if the Football Player changes directions
+            break;
+        }
+
+    }
+
+    int framesPassed = frames.back() - frames[frames.size() - (numIterations + 1)];
+
+    double avgXChange = double(coordinates.back().x - coordinates[coordinates.size() - (numIterations + 1)].x) / double(framesPassed);
+    double avgYChange = double(coordinates.back().y - coordinates[coordinates.size() - (numIterations + 1)].y) / double(framesPassed);
+
+
+    return cv::Rect(
+            int(coordinates.back().x + (avgXChange * ( frameNum - frames.back()))),
+            int(coordinates.back().y + (avgYChange * (frameNum - frames.back()))),
+            coordinates.back().width,
+            coordinates.back().height
+            );
+}
 /*
  * Calc new velocity, update coordinates and frame num.
  */
@@ -1317,3 +1386,5 @@ void helperBGRKMean(Mat const &frame, int clusterCount, Mat &labels, Mat &center
         }
 #endif
 }
+
+

@@ -21,6 +21,7 @@
 #include "PanoramaTracking.h"
 #include "PanoramaTrackingImplementations.h"
 
+
 using namespace cv;
 using namespace dnn;
 using namespace std;
@@ -42,23 +43,26 @@ int main(int argc, char *argv[]) {
     stringstream conv;
     char * video_path = argv[5];
 
+    RegionTracker rt;
+
+    rt.trackVideo(video_path);
+#ifdef UNDEF
     string prefix = "/home/flo/Videos/";
+
     string videonames[] = {
-            "TS_10_5.mp4",
-            "Video2.mp4"
+            "Video2.mp4",
+            "TS_10_5_t01.mp4",
+            "TS_10_5.mp4"
     };
 
     RegionTracker rt;
 
-    for(short i = 0; i < 3; ++i){
-        rt.enableVideoSave(("tracked_" + videonames[i]).c_str());
-        rt.setAOIFile(("aoi_" + videonames[i] + ".csv").c_str());
-        rt.trackVideo((prefix+videonames[i]).c_str());
+    for(string const & s : videonames){
+        rt.enableVideoSave(("tracked_" + s).c_str());
+        rt.setAOIFile(("aoi_" + s + ".csv").c_str());
+        rt.trackVideo((prefix+s).c_str());
     }
-
-
-
-    rt.trackVideo(video_path);
+#endif
 
     VideoCapture vc(video_path);
 

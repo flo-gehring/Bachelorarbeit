@@ -30,6 +30,7 @@
 using namespace std;
 using namespace cv;
 
+#define P2C_AOI_FROM_FILE
 
 
 
@@ -38,6 +39,8 @@ public:
     FootballPlayer(Rect coordinate, int frame, string const & identifier);
     void addPosition(Rect coordinates, int frame);
     void update(Rect const & coordinates, int frame);
+
+    Rect predictPosition(int frameNum);
 
     /*
      * Interpret as Follows: If i is an integer in "frames" at position X, then the Football Player appeared
@@ -54,6 +57,7 @@ public:
     double x_vel, y_vel; // "Velocity in Pixels per frame"
     Mat hist; // Histogramm of the Player when he was first detected.
     Mat bgrShirtColor;
+
 };
 
 
@@ -94,7 +98,7 @@ public:
     Rect area;
     vector<Region *> metaOldRegions;
     vector<Region *> metaNewRegions;
-    int* matchOldAndNewRegions(Mat  frame, int * matching);
+    int* matchOldAndNewRegions(Mat  frame, int * matching, int currentFrame);
 
 };
 
@@ -154,7 +158,11 @@ protected:
 
     vector<FootballPlayer *> footballPlayers;
 
+    #ifdef P2C_AOI_FROM_FILE
+    DetectionFromFile darknetDetector;
+    #else
     MatDetector darknetDetector;
+    #endif
 
     int objectCounter = 0;
     int currentFrame = 0;
