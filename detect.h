@@ -47,7 +47,10 @@ class MatDetector {
 public:
     MatDetector();
 
-std::vector<AbsoluteBoundingBoxes> found;
+
+    float nmsBoxesConfidenceThresh, nmsBoxesParameter;
+
+    std::vector<AbsoluteBoundingBoxes> found;
 char *  cfgfile;
 char * weightfile;
 char* datacfg;

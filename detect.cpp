@@ -12,6 +12,10 @@
 #define OUTFILE
 MatDetector::MatDetector(){
 
+    float nmsBoxesConfidenceThresh = 0.7;
+    float nmsBoxesParameter = 0.01;
+
+
     fps = 0;
     demo_thresh = 0.5f;
     demo_hier = 0.5f;
@@ -79,7 +83,7 @@ void MatDetector::detect_and_display(cv::Mat input_mat){
     //dets = avg_predictions(net, &nboxes);
     dets = get_network_boxes(net, darknet_image.w, darknet_image.h, thresh, demo_thresh, 0, 1, &nboxes);
 
-    if (nms > 0) do_nms_obj(dets, nboxes, l.classes, nms);
+    if (nms > 0) do_nms_obj(dets, nboxes, l.classes, nms); // We're doing another NMS later on, it will result in more stable Boxes. Do not remove nonetheless.
 
 
     // printf("\033[2J");
@@ -201,7 +205,7 @@ void  MatDetector::print_detections(image im, detection *dets, int num){
      * TODO: Replace class_name placeholder with correct Class
      * TODO: Make nms threshold and confidence Threhsold a variable.
      */
-    cv::dnn::NMSBoxes(bboxes, scores, .5, 0.1, indices);
+    cv::dnn::NMSBoxes(bboxes, scores, nmsBoxesConfidenceThresh, nmsBoxesParameter, indices);
     for(auto it = indices.begin(); it != indices.end(); ++it){
 
         found.push_back(AbsoluteBoundingBoxes());
@@ -254,7 +258,13 @@ image ipl_to_image(IplImage* src)
 }
 
 
-
+/********************************************************************************************************
+*                                                                                                       *
+ *  Class: DetectionFromFile                                                                            *
+ *  ------------------------                                                                            *
+ *  Class for testing purposes which Loads AOIs from a File which can be modified in the Constructor.   *
+ *                                                                                                      *
+ ********************************************************************************************************/
 
 void DetectionFromFile::detect_and_display(cv::Mat inputMat) {
 
