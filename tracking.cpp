@@ -13,13 +13,27 @@
 /*
  * Initializes the Tracker.
  * Performs the first round of detection which differs slightly from the following.
+ * Cleans up from eventual past detections.
  */
 int RegionTracker::initialize(Mat frame) {
 
+    // Clean up before tracking Players in a new video.
+    for(FootballPlayer * fp: footballPlayers) {
+        delete fp;
+    }
+    footballPlayers.clear();
 
+    regionsNewFrame.clear();
+    regionLastFrame.clear();
+
+    for (Region * r: outOfSightRegions){
+        delete r;
+    }
+    outOfSightRegions.clear(); // Cleanup complete.
 
     currentFrame = 0;
     matCurrentFrame = frame;
+
 
     // All the detected Objects will be stored as rectangles in detectedRects
     vector<Rect> detectedRects = detectOnFrame(frame);
@@ -32,7 +46,7 @@ int RegionTracker::initialize(Mat frame) {
 
         CV_Assert(it->area() != 0);
 
-        newPlayer = new FootballPlayer((*it), 1, to_string(objectCounter));
+        newPlayer = new FootballPlayer((*it), 0, to_string(objectCounter));
 
         footballPlayers.emplace_back(newPlayer);
         regionsNewFrame.emplace_back(Region(*it,  footballPlayers.back()));
@@ -92,40 +106,112 @@ bool RegionTracker::update(Mat frame) {
  * The coordinates of the detected Bounding Boxes are projected back onto the original frame.
  */
 vector<Rect> RegionTracker::detectOnFrame(Mat  & frame) {
+
+    const int numOfFaces = 4; // if 4 -> neither top or bottom face. 6 -> all faces.
+
     vector<Rect> detected;
     int sideLength = 500;
     Mat face;
     Rect panoramaCoords;
 
-    vector<float> scores;
+    array<vector<float>, numOfFaces> scores;
     vector<int> indices;
-    vector<Rect> tmpDetected;
 
-    for(int faceId = 0; faceId < 6; ++faceId){
+    array<vector<Rect>, numOfFaces> tmpDetected;
+    tmpDetected.fill(vector<Rect>());
+
+    unsigned long countDetectedBoxes = 0;
+
+
+
+    // We usually dont need top and bottom, this also increases performance massively,
+    // because the bb of the cameraman was rather large, which slowed down the k-mean Algorithm.
+    for(int faceId = 0; faceId < numOfFaces; ++faceId){
         createCubeMapFace(frame, face, faceId, sideLength, sideLength);
         darknetDetector.detect_and_display(face);
+        cout << "FaceSide" << faceId << endl;
 
-        // We usually dont need top and bottom, this also increases performance massively,
-        // because the bb of the cameraman was rather large, which slowed down the k-mean Algorithm.
-        if( faceId != 5 && faceId != 6) {
-            for (auto detectedObjects = darknetDetector.found.begin();
-                 detectedObjects != darknetDetector.found.end(); ++detectedObjects) {
 
-                mapRectangleToPanorama(frame, faceId, sideLength, sideLength, (*detectedObjects).rect, panoramaCoords);
+        for (auto detectedObjects = darknetDetector.found.begin();
+            detectedObjects != darknetDetector.found.end(); ++detectedObjects) {
 
-                tmpDetected.push_back(panoramaCoords);
-                scores.push_back((*detectedObjects).prob);
+            tmpDetected[faceId].push_back((*detectedObjects).rect);
+            scores[faceId].push_back((*detectedObjects).prob);
+            ++countDetectedBoxes;
+
+            printf("(%i,%i,%i,%i) \n", (*detectedObjects).rect.x, (*detectedObjects).rect.y, (*detectedObjects).rect.width, (*detectedObjects).rect.height);
+
+
+            }
+
+
+    }
+
+    // Sort out bounding boxes on the edge of cube sides who probably denote the same person (or merge them)
+    // This only makes sense for the first 4 face sides.
+    // TODO: Actually we may be able to remove scores, which makes the loop simpler.
+    int rightFace;
+    int spaceThreshold  = 5; //
+    for(int leftFace = 0; leftFace < 4; ++leftFace){
+        rightFace = (leftFace + 1) % 4; //Wrap around if you reach the right most cube face.
+
+        for(Rect  & leftRect: tmpDetected[leftFace]){
+            if(leftRect.x + leftRect.width > sideLength - spaceThreshold){
+
+                for(int  iteratorOffset = 0 ; tmpDetected[rightFace].begin() + iteratorOffset !=  tmpDetected[rightFace].end(); ){
+
+                    Rect & rightRect = tmpDetected[rightFace][iteratorOffset];
+                    if(rightRect.x < spaceThreshold && // Check if the Bounding Boxes overlap on the vertical axis.
+                            ((leftRect.y - spaceThreshold <=  rightRect.y && leftRect.y + spaceThreshold >= rightRect.y)
+                            || (leftRect.y - spaceThreshold <= rightRect.y + rightRect.height && leftRect.y + spaceThreshold >= rightRect.y + rightRect.height))){ // Bounding Boxes probably denote the same player.
+
+                        if(rightFace != 0){
+                            leftRect.width += rightRect.width;
+                        }
+                        tmpDetected[rightFace].erase(tmpDetected[rightFace].begin() + iteratorOffset); //
+                        scores[rightFace].erase(scores[rightFace].begin() + iteratorOffset);
+                        --countDetectedBoxes;
+                    }
+                    else {
+                       ++iteratorOffset;
+                    }
+
+                }
 
             }
         }
-    }
-    // Perfrorm NMS on detected Recangles and copy accepted rects to detected
-    dnn::NMSBoxes(tmpDetected, scores, 0.4f, 0.2f, indices);
-    for(int i : indices){
-        detected.emplace_back(Rect(tmpDetected[i]));
+
     }
 
-    return detected;
+    // Flatten the detected Boxes and project them onto the whole frame
+    vector<Rect> flattenedDetected;
+    flattenedDetected.reserve(countDetectedBoxes);
+    vector<float> flattenedScores;
+    flattenedScores.reserve(countDetectedBoxes);
+
+    vector<Rect> & tmpFlattenRects = tmpDetected[0];
+    vector<float> & tmpFlattenScores = scores[0];
+
+    Rect currentFlattenRect;
+    float currentFlattenScore;
+    int flattenCounter = 0;
+    for(int faceSide = 0; faceSide < numOfFaces; ++ faceSide){
+
+        tmpFlattenRects = tmpDetected[faceSide];
+        tmpFlattenScores = scores[faceSide];
+
+        for(int i = 0; i < tmpDetected[faceSide].size(); ++i){
+
+            currentFlattenRect = tmpFlattenRects[i];
+            currentFlattenScore = tmpFlattenScores[i];
+
+            mapRectangleToPanorama(frame, faceSide, sideLength, sideLength, currentFlattenRect, panoramaCoords);
+
+            flattenedDetected.emplace_back(Rect(panoramaCoords));
+            flattenedScores.emplace_back(currentFlattenScore);
+        }
+    }
+    return flattenedDetected;
 
 }
 
@@ -194,6 +280,11 @@ void RegionTracker::trackVideo(const char *filename) {
     int frameCounter = 0;
 
     video >> frame;
+
+    while(frameCounter < 140){
+        video >> frame;
+        ++frameCounter;
+    }
 
 
 
@@ -478,7 +569,7 @@ vector<MetaRegion> RegionTracker::calcMetaRegions() {
             addToOutOfSight(r);
     }
 
-
+#ifdef DEBUG
     int tmp = 0;
     for(MetaRegion const & mr : metaRegions) {
         if(mr.metaNewRegions.size() != 1 || mr.metaOldRegions.size() != 1){
@@ -487,7 +578,7 @@ vector<MetaRegion> RegionTracker::calcMetaRegions() {
         }
         ++tmp;
     }
-
+#endif
     for(Region * r : outOfSightFound) assert(outOfSightFound.count(r) <= 1);
     for(Region * r: associatedMRFound) assert(associatedMRFound.count(r) <= 1);
     return metaRegions;
@@ -496,30 +587,45 @@ vector<MetaRegion> RegionTracker::calcMetaRegions() {
 // TODO: Would it be good to make Color a "hard" criterion and just dismiss every color combination which differs too much?
 /*
  * Calculate how similiar two Regions are to each other.
- * Things taken into Consideration: Size, Histogramm, Position, Colorscheme.
+ * Things taken into Consideration: Size, (Predicted-)Position, Colorscheme.
  * The bigger the value, the more the likelihood of them representing the same area.
  */
 
-double calcWeightedSimiliarity(Region  * r1, Region *r2, Rect area, Mat frame){
+double calcWeightedSimiliarity(Region  * oldRegion, Region *newRegion, Rect area, Mat frame, int frameNum){
+
+
     double similaritySize, similarityPosition, similarityHistogramm, similarityColor;
 
     // Size
-    similaritySize = float(r1->coordinates.area()) / float(r2->coordinates.area());
+    similaritySize = float(oldRegion->coordinates.area()) / float(newRegion->coordinates.area());
     if(similaritySize > 1) similaritySize = 1 / similaritySize;
 
+    // If the Player was seen in the Last frame, take the old Position, else use the  predicted Position
     // Position
     // Compare the Position of the upper left corner, hypotenuseMetaRegion is the maximum possible distance
     // and would result in a value of zero.
+    Rect positionOldRegion;
+    if(oldRegion->playerInRegion->frames.back() == frameNum - 1){
+        positionOldRegion = oldRegion->coordinates;
+    }
+    else{
+        positionOldRegion = oldRegion->playerInRegion->predictPosition(frameNum);
+#ifdef UNDEF
+        cout << "Frame " << frameNum << endl;
+        printf("(%i, %i, %i, %i)", positionOldRegion.x, positionOldRegion.y, positionOldRegion.width, positionOldRegion.height );
+        cout << endl;
+#endif
+    }
     double hypotenuseMetaRegion = sqrt(pow(area.width , 2) + pow(area.height, 2));
-    double lengthVector = sqrt(pow(r1->coordinates.x - r2->coordinates.x, 2) + pow(r1->coordinates.y - r2->coordinates.y, 2));
+    double lengthVector = sqrt(pow(positionOldRegion.x - newRegion->coordinates.x, 2) + pow(positionOldRegion.y - newRegion->coordinates.y, 2));
     similarityPosition = (hypotenuseMetaRegion - lengthVector) / hypotenuseMetaRegion;
 
     //Histogram
     // http://answers.opencv.org/question/8154/question-about-histogram-comparison-return-value/
     // Return Value of CV_COMP_CORRELL: -1 is worst, 1 is best. -> Map to  [0,1]
     /* Mat hist1, hist2;
-    histFromRect(frame, r1->coordinates, hist1);
-    histFromRect(frame, r2->coordinates, hist2);
+    histFromRect(frame, oldRegion->coordinates, hist1);
+    histFromRect(frame, newRegion->coordinates, hist2);
 
     similarityHistogramm = compareHist(hist1, hist2, CV_COMP_CORREL);
     similarityHistogramm = (similarityHistogramm / 2) + 0.5; // Map [-1,1] to [0,1]
@@ -527,14 +633,14 @@ double calcWeightedSimiliarity(Region  * r1, Region *r2, Rect area, Mat frame){
     similarityHistogramm = 0;
     
     // Color
-    // CIE94 Formula. If the difference has a value greater than 100, similarityColor turns negativ.
+    // CIE94 Formula. If the difference has a value greater than 100, similarityColor turns negative.
     // TODO: Think about the difference Value: Maybe make it turn negative with an even smaller Value like 20.
     // 0x56215dc9c318
 
 
     similarityColor = deltaECIE94(
-                r1->labShirtColor[0], r1->labShirtColor[1], r1->labShirtColor[2],
-                r2->labShirtColor[0], r2->labShirtColor[1], r2->labShirtColor[2]
+                oldRegion->labShirtColor[0], oldRegion->labShirtColor[1], oldRegion->labShirtColor[2],
+                newRegion->labShirtColor[0], newRegion->labShirtColor[1], newRegion->labShirtColor[2]
         );
 
     similarityColor = (100 - similarityColor) / 100;
@@ -552,15 +658,14 @@ double calcWeightedSimiliarity(Region  * r1, Region *r2, Rect area, Mat frame){
 void RegionTracker::assignRegions( MetaRegion & metaRegion) {
 
     // Create and Initalize Array filled with zeroes.
-    int * matching =  new int[metaRegion.metaNewRegions.size() * metaRegion.metaOldRegions.size()];
+    int  matching[metaRegion.metaNewRegions.size() * metaRegion.metaOldRegions.size()];
     for(int it = 0; it < metaRegion.metaOldRegions.size() * metaRegion.metaNewRegions.size(); ++it){
         matching[it] = 0;
     }
 
 
-    metaRegion.matchOldAndNewRegions(matCurrentFrame, matching);
+    metaRegion.matchOldAndNewRegions(matCurrentFrame, matching, currentFrame);
 
-#define DEBUGPRINT
     #ifdef DEBUGPRINT
     // Print matching
             for(int rowCounter = 0; rowCounter < metaRegion.metaOldRegions.size(); ++rowCounter){
@@ -593,7 +698,7 @@ void RegionTracker::assignRegions( MetaRegion & metaRegion) {
 
         }
     }
-    delete[] matching;
+
 }
 
 /*
@@ -679,7 +784,7 @@ void optimizeWeightSelection(int rows, int cols, double * const weightMatrix, in
  * Create a matrix M in which is saved which regions are the most similiar to each other.
  * If M[i,j] == 1, then metaOldRegions[i] corresponds to metaNewRegion[j]
  */
-int *  MetaRegion::matchOldAndNewRegions(Mat frame, int * matching){
+int *  MetaRegion::matchOldAndNewRegions(Mat frame, int * matching, int frameNum){
 
     unsigned long oldRegionSize = metaOldRegions.size();
     unsigned long newRegionSize = metaNewRegions.size();
@@ -694,12 +799,12 @@ int *  MetaRegion::matchOldAndNewRegions(Mat frame, int * matching){
         for(int colCounter = 0; colCounter < metaNewRegions.size(); ++colCounter){
 
             matchingMatrix[(rowCounter * newRegionSize) + colCounter] =
-                    calcWeightedSimiliarity(currentOldRegion, metaNewRegions[colCounter], area, frame);
+                    calcWeightedSimiliarity(currentOldRegion, metaNewRegions[colCounter], area, frame, frameNum);
         }
     }
 
     // Print Matrix for debugging purposes
-#define P2C_SHOW_MATCHING_MATRIX
+    // TODO: Strange output here. Investigate
 #ifdef P2C_SHOW_MATCHING_MATRIX
     cout << std::fixed << std::setw(5) << std::setprecision(4);
 
@@ -909,6 +1014,7 @@ RegionTracker::RegionTracker(const char *aoiFilePath, const char * videoPath) {
 }
 
 RegionTracker::RegionTracker() {
+
     saveVideo = false;
     roiData = fopen("roidata.txt", "w");
     debugData = fopen("debugdata.txt", "w");
@@ -942,12 +1048,53 @@ void FootballPlayer::addPosition(Rect coordinates, int frame) {
 }
 
 
+Rect FootballPlayer::predictPosition(int frameNum) {
+
+
+    if(coordinates.size() < 2)
+        return Rect(coordinates.back());
+
+    int deltaX[frames.size()];
+    int deltaY[frames.size()];
+
+    int iInc;
+    for(int i = 0; i < coordinates.size(); ++i){
+        iInc = i + 1;
+        deltaX[i] = coordinates[coordinates.size() -  iInc].x;
+        deltaY[i] = coordinates[coordinates.size() - iInc].y;
+    }
+    int numIterations = 0;
+    for(int i = 0; i < coordinates.size() - 1; ++i){
+        iInc = i + 1;
+
+        deltaX[i] = deltaX[iInc] - deltaX[i];
+        deltaY[i] = deltaY[iInc] - deltaY[i];
+        numIterations = iInc;
+        if(i > 0 &&  ((deltaX[i] * deltaX[i-1] < 0) || (deltaY[i] * deltaY[i-1] < 0))){ // Break if the Football Player changes directions
+            break;
+        }
+
+    }
+
+    int framesPassed = frames.back() - frames[frames.size() - (numIterations + 1)];
+
+    double avgXChange = double(coordinates.back().x - coordinates[coordinates.size() - (numIterations + 1)].x) / double(framesPassed);
+    double avgYChange = double(coordinates.back().y - coordinates[coordinates.size() - (numIterations + 1)].y) / double(framesPassed);
+
+
+    return cv::Rect(
+            int(coordinates.back().x + (avgXChange * ( frameNum - frames.back()))),
+            int(coordinates.back().y + (avgYChange * (frameNum - frames.back()))),
+            coordinates.back().width,
+            coordinates.back().height
+            );
+}
 /*
  * Calc new velocity, update coordinates and frame num.
  */
 void FootballPlayer::update(Rect const &coordinates, int frame) {
 
-    int numKnownFrames = frames.size();
+    unsigned long numKnownFrames = frames.size();
 
     addPosition(coordinates, frame);
 
@@ -1285,7 +1432,6 @@ void helperBGRKMean(Mat const &frame, int clusterCount, Mat &labels, Mat &center
         }
     }
 
-
     int attempts = 5;
 
     kmeans(samples, clusterCount, labels, TermCriteria(CV_TERMCRIT_ITER|CV_TERMCRIT_EPS, 10000, 0.0001), attempts, KMEANS_PP_CENTERS, centers );
@@ -1317,3 +1463,5 @@ void helperBGRKMean(Mat const &frame, int clusterCount, Mat &labels, Mat &center
         }
 #endif
 }
+
+
