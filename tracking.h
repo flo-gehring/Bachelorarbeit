@@ -24,6 +24,7 @@
 #include <stdio.h>
 #include <unordered_set>
 #include <algorithm>
+#include "array"
 
 #include "cubetransform.h"
 
@@ -158,7 +159,7 @@ protected:
 
     vector<FootballPlayer *> footballPlayers;
 
-    #ifdef P2C_AOI_FROM_FILE
+    #ifdef UNDEF
     DetectionFromFile darknetDetector;
     #else
     MatDetector darknetDetector;

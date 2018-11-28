@@ -106,40 +106,112 @@ bool RegionTracker::update(Mat frame) {
  * The coordinates of the detected Bounding Boxes are projected back onto the original frame.
  */
 vector<Rect> RegionTracker::detectOnFrame(Mat  & frame) {
+
+    const int numOfFaces = 4; // if 4 -> neither top or bottom face. 6 -> all faces.
+
     vector<Rect> detected;
     int sideLength = 500;
     Mat face;
     Rect panoramaCoords;
 
-    vector<float> scores;
+    array<vector<float>, numOfFaces> scores;
     vector<int> indices;
-    vector<Rect> tmpDetected;
 
-    for(int faceId = 0; faceId < 6; ++faceId){
+    array<vector<Rect>, numOfFaces> tmpDetected;
+    tmpDetected.fill(vector<Rect>());
+
+    unsigned long countDetectedBoxes = 0;
+
+
+
+    // We usually dont need top and bottom, this also increases performance massively,
+    // because the bb of the cameraman was rather large, which slowed down the k-mean Algorithm.
+    for(int faceId = 0; faceId < numOfFaces; ++faceId){
         createCubeMapFace(frame, face, faceId, sideLength, sideLength);
         darknetDetector.detect_and_display(face);
+        cout << "FaceSide" << faceId << endl;
 
-        // We usually dont need top and bottom, this also increases performance massively,
-        // because the bb of the cameraman was rather large, which slowed down the k-mean Algorithm.
-        if( faceId != 5 && faceId != 6) {
-            for (auto detectedObjects = darknetDetector.found.begin();
-                 detectedObjects != darknetDetector.found.end(); ++detectedObjects) {
 
-                mapRectangleToPanorama(frame, faceId, sideLength, sideLength, (*detectedObjects).rect, panoramaCoords);
+        for (auto detectedObjects = darknetDetector.found.begin();
+            detectedObjects != darknetDetector.found.end(); ++detectedObjects) {
 
-                tmpDetected.push_back(panoramaCoords);
-                scores.push_back((*detectedObjects).prob);
+            tmpDetected[faceId].push_back((*detectedObjects).rect);
+            scores[faceId].push_back((*detectedObjects).prob);
+            ++countDetectedBoxes;
+
+            printf("(%i,%i,%i,%i) \n", (*detectedObjects).rect.x, (*detectedObjects).rect.y, (*detectedObjects).rect.width, (*detectedObjects).rect.height);
+
+
+            }
+
+
+    }
+
+    // Sort out bounding boxes on the edge of cube sides who probably denote the same person (or merge them)
+    // This only makes sense for the first 4 face sides.
+    // TODO: Actually we may be able to remove scores, which makes the loop simpler.
+    int rightFace;
+    int spaceThreshold  = 5; //
+    for(int leftFace = 0; leftFace < 4; ++leftFace){
+        rightFace = (leftFace + 1) % 4; //Wrap around if you reach the right most cube face.
+
+        for(Rect  & leftRect: tmpDetected[leftFace]){
+            if(leftRect.x + leftRect.width > sideLength - spaceThreshold){
+
+                for(int  iteratorOffset = 0 ; tmpDetected[rightFace].begin() + iteratorOffset !=  tmpDetected[rightFace].end(); ){
+
+                    Rect & rightRect = tmpDetected[rightFace][iteratorOffset];
+                    if(rightRect.x < spaceThreshold && // Check if the Bounding Boxes overlap on the vertical axis.
+                            ((leftRect.y - spaceThreshold <=  rightRect.y && leftRect.y + spaceThreshold >= rightRect.y)
+                            || (leftRect.y - spaceThreshold <= rightRect.y + rightRect.height && leftRect.y + spaceThreshold >= rightRect.y + rightRect.height))){ // Bounding Boxes probably denote the same player.
+
+                        if(rightFace != 0){
+                            leftRect.width += rightRect.width;
+                        }
+                        tmpDetected[rightFace].erase(tmpDetected[rightFace].begin() + iteratorOffset); //
+                        scores[rightFace].erase(scores[rightFace].begin() + iteratorOffset);
+                        --countDetectedBoxes;
+                    }
+                    else {
+                       ++iteratorOffset;
+                    }
+
+                }
 
             }
         }
-    }
-    // Perfrorm NMS on detected Recangles and copy accepted rects to detected
-    dnn::NMSBoxes(tmpDetected, scores, 0.4f, 0.2f, indices);
-    for(int i : indices){
-        detected.emplace_back(Rect(tmpDetected[i]));
+
     }
 
-    return detected;
+    // Flatten the detected Boxes and project them onto the whole frame
+    vector<Rect> flattenedDetected;
+    flattenedDetected.reserve(countDetectedBoxes);
+    vector<float> flattenedScores;
+    flattenedScores.reserve(countDetectedBoxes);
+
+    vector<Rect> & tmpFlattenRects = tmpDetected[0];
+    vector<float> & tmpFlattenScores = scores[0];
+
+    Rect currentFlattenRect;
+    float currentFlattenScore;
+    int flattenCounter = 0;
+    for(int faceSide = 0; faceSide < numOfFaces; ++ faceSide){
+
+        tmpFlattenRects = tmpDetected[faceSide];
+        tmpFlattenScores = scores[faceSide];
+
+        for(int i = 0; i < tmpDetected[faceSide].size(); ++i){
+
+            currentFlattenRect = tmpFlattenRects[i];
+            currentFlattenScore = tmpFlattenScores[i];
+
+            mapRectangleToPanorama(frame, faceSide, sideLength, sideLength, currentFlattenRect, panoramaCoords);
+
+            flattenedDetected.emplace_back(Rect(panoramaCoords));
+            flattenedScores.emplace_back(currentFlattenScore);
+        }
+    }
+    return flattenedDetected;
 
 }
 
@@ -208,6 +280,11 @@ void RegionTracker::trackVideo(const char *filename) {
     int frameCounter = 0;
 
     video >> frame;
+
+    while(frameCounter < 140){
+        video >> frame;
+        ++frameCounter;
+    }
 
 
 
@@ -492,7 +569,7 @@ vector<MetaRegion> RegionTracker::calcMetaRegions() {
             addToOutOfSight(r);
     }
 
-
+#ifdef DEBUG
     int tmp = 0;
     for(MetaRegion const & mr : metaRegions) {
         if(mr.metaNewRegions.size() != 1 || mr.metaOldRegions.size() != 1){
@@ -501,7 +578,7 @@ vector<MetaRegion> RegionTracker::calcMetaRegions() {
         }
         ++tmp;
     }
-
+#endif
     for(Region * r : outOfSightFound) assert(outOfSightFound.count(r) <= 1);
     for(Region * r: associatedMRFound) assert(associatedMRFound.count(r) <= 1);
     return metaRegions;
@@ -533,9 +610,11 @@ double calcWeightedSimiliarity(Region  * oldRegion, Region *newRegion, Rect area
     }
     else{
         positionOldRegion = oldRegion->playerInRegion->predictPosition(frameNum);
+#ifdef UNDEF
         cout << "Frame " << frameNum << endl;
         printf("(%i, %i, %i, %i)", positionOldRegion.x, positionOldRegion.y, positionOldRegion.width, positionOldRegion.height );
         cout << endl;
+#endif
     }
     double hypotenuseMetaRegion = sqrt(pow(area.width , 2) + pow(area.height, 2));
     double lengthVector = sqrt(pow(positionOldRegion.x - newRegion->coordinates.x, 2) + pow(positionOldRegion.y - newRegion->coordinates.y, 2));
@@ -554,7 +633,7 @@ double calcWeightedSimiliarity(Region  * oldRegion, Region *newRegion, Rect area
     similarityHistogramm = 0;
     
     // Color
-    // CIE94 Formula. If the difference has a value greater than 100, similarityColor turns negativ.
+    // CIE94 Formula. If the difference has a value greater than 100, similarityColor turns negative.
     // TODO: Think about the difference Value: Maybe make it turn negative with an even smaller Value like 20.
     // 0x56215dc9c318
 
@@ -587,7 +666,6 @@ void RegionTracker::assignRegions( MetaRegion & metaRegion) {
 
     metaRegion.matchOldAndNewRegions(matCurrentFrame, matching, currentFrame);
 
-#define DEBUGPRINT
     #ifdef DEBUGPRINT
     // Print matching
             for(int rowCounter = 0; rowCounter < metaRegion.metaOldRegions.size(); ++rowCounter){
@@ -726,7 +804,7 @@ int *  MetaRegion::matchOldAndNewRegions(Mat frame, int * matching, int frameNum
     }
 
     // Print Matrix for debugging purposes
-#define P2C_SHOW_MATCHING_MATRIX
+    // TODO: Strange output here. Investigate
 #ifdef P2C_SHOW_MATCHING_MATRIX
     cout << std::fixed << std::setw(5) << std::setprecision(4);
 
@@ -1016,7 +1094,7 @@ Rect FootballPlayer::predictPosition(int frameNum) {
  */
 void FootballPlayer::update(Rect const &coordinates, int frame) {
 
-    int numKnownFrames = frames.size();
+    unsigned long numKnownFrames = frames.size();
 
     addPosition(coordinates, frame);
 
@@ -1353,7 +1431,6 @@ void helperBGRKMean(Mat const &frame, int clusterCount, Mat &labels, Mat &center
             }
         }
     }
-
 
     int attempts = 5;
 
