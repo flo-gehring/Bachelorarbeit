@@ -43,10 +43,10 @@ int main(int argc, char *argv[]) {
     stringstream conv;
     char * video_path = argv[5];
 
-    RegionTracker rt;
-
+       RegionTracker rt;
     rt.trackVideo(video_path);
-#ifdef UNDEF
+
+    /*
     string prefix = "/home/flo/Videos/";
 
     string videonames[] = {
@@ -62,7 +62,8 @@ int main(int argc, char *argv[]) {
         rt.setAOIFile(("aoi_" + s + ".csv").c_str());
         rt.trackVideo((prefix+s).c_str());
     }
-#endif
+     */
+
 
     VideoCapture vc(video_path);
 

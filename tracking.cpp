@@ -76,10 +76,10 @@ bool RegionTracker::update(Mat frame) {
 
     vector<Rect> newRects = detectOnFrame(frame);
 
-    for(auto it = newRects.begin(); it != newRects.end(); ++it){
+    for(Rect const & rect: newRects){
 
-        regionsNewFrame.emplace_back(Region(*it));
-        assert((*it).area() != 0);
+        regionsNewFrame.emplace_back(Region(rect));
+        assert((rect).area() != 0);
     }
 
     for(Region  & newRegion: regionsNewFrame) newRegion.createColorProfile(matCurrentFrame);
@@ -140,6 +140,7 @@ vector<Rect> RegionTracker::detectOnFrame(Mat  & frame) {
             ++countDetectedBoxes;
 
             printf("(%i,%i,%i,%i) \n", (*detectedObjects).rect.x, (*detectedObjects).rect.y, (*detectedObjects).rect.width, (*detectedObjects).rect.height);
+            cout << endl;
 
 
             }
@@ -280,15 +281,20 @@ void RegionTracker::trackVideo(const char *filename) {
     int frameCounter = 0;
 
     video >> frame;
-
+/*
+ * Skip some frames-
     while(frameCounter < 140){
         video >> frame;
         ++frameCounter;
-    }
+   } */
 
 
 
     while(! frame.empty()){
+
+        if(analysisData){
+            fprintf(analysisDataFile, "------------ \n Frame: %i: \n", currentFrame + 1);
+        }
         waitKey(30);
 
         cout << "Frame No.: "<< frameCounter << endl;
@@ -309,9 +315,9 @@ void RegionTracker::trackVideo(const char *filename) {
         putText(frame, "Tracker: Darknet" , Point(0, 100), FONT_HERSHEY_PLAIN, 4, Scalar(0,0,255), 2);
         putText(frame, "Frame No." + to_string(frameCounter), Point(0, 150), FONT_HERSHEY_PLAIN, 4, Scalar(0,0,255), 2);
 
-        for(Region region : regionsNewFrame){
+        for(Region const & region : regionsNewFrame){
 
-            CV_Assert(region.playerInRegion->identifier.size() > 0);
+            CV_Assert(! region.playerInRegion->identifier.empty());
 
         }
 
@@ -321,7 +327,7 @@ void RegionTracker::trackVideo(const char *filename) {
     if(! saveVideo) {
         resize(frame, resizedFrame, Size(1980, 1020));
         imshow(windowName, resizedFrame);
-        char c = waitKey(30);
+        int c = waitKey(30);
         bool pauseVid = c == 32; // Space
         while (pauseVid) {
             c = waitKey(10);
@@ -335,6 +341,8 @@ void RegionTracker::trackVideo(const char *filename) {
     video >> frame;
 
     }
+
+    vw.release();
 
 }
 
@@ -367,7 +375,7 @@ RegionTracker::~RegionTracker() {
 bool helperOutOfSightInMeta(MetaRegion & mr, vector<Region *> & outOfSight, unordered_set<Region *> alreadyFound, int currentFrame){
     bool areaUnchanged = true;
     Rect commonArea;
-    bool regionInMeta = false;
+    bool regionInMeta;
 
     auto search = [](MetaRegion & mr, Region * r){
 
@@ -591,7 +599,7 @@ vector<MetaRegion> RegionTracker::calcMetaRegions() {
  * The bigger the value, the more the likelihood of them representing the same area.
  */
 
-double calcWeightedSimiliarity(Region  * oldRegion, Region *newRegion, Rect area, Mat frame, int frameNum){
+double RegionTracker::calcWeightedSimiliarity(Region  * oldRegion, Region *newRegion, Rect area){
 
 
     double similaritySize, similarityPosition, similarityHistogramm, similarityColor;
@@ -605,11 +613,11 @@ double calcWeightedSimiliarity(Region  * oldRegion, Region *newRegion, Rect area
     // Compare the Position of the upper left corner, hypotenuseMetaRegion is the maximum possible distance
     // and would result in a value of zero.
     Rect positionOldRegion;
-    if(oldRegion->playerInRegion->frames.back() == frameNum - 1){
+    if(oldRegion->playerInRegion->frames.back() == currentFrame - 1){
         positionOldRegion = oldRegion->coordinates;
     }
     else{
-        positionOldRegion = oldRegion->playerInRegion->predictPosition(frameNum);
+        positionOldRegion = oldRegion->playerInRegion->predictPosition(currentFrame);
 #ifdef UNDEF
         cout << "Frame " << frameNum << endl;
         printf("(%i, %i, %i, %i)", positionOldRegion.x, positionOldRegion.y, positionOldRegion.width, positionOldRegion.height );
@@ -623,13 +631,13 @@ double calcWeightedSimiliarity(Region  * oldRegion, Region *newRegion, Rect area
     //Histogram
     // http://answers.opencv.org/question/8154/question-about-histogram-comparison-return-value/
     // Return Value of CV_COMP_CORRELL: -1 is worst, 1 is best. -> Map to  [0,1]
-    /* Mat hist1, hist2;
-    histFromRect(frame, oldRegion->coordinates, hist1);
-    histFromRect(frame, newRegion->coordinates, hist2);
+     Mat hist1, hist2;
+    histFromRect(matCurrentFrame, oldRegion->coordinates, hist1);
+    histFromRect(matCurrentFrame, newRegion->coordinates, hist2);
 
     similarityHistogramm = compareHist(hist1, hist2, CV_COMP_CORREL);
     similarityHistogramm = (similarityHistogramm / 2) + 0.5; // Map [-1,1] to [0,1]
-     */
+
     similarityHistogramm = 0;
     
     // Color
@@ -645,7 +653,11 @@ double calcWeightedSimiliarity(Region  * oldRegion, Region *newRegion, Rect area
 
     similarityColor = (100 - similarityColor) / 100;
 
-
+    if(analysisData) {
+        fprintf(analysisDataFile, "%f.4 + %f.4 + %f.4 + %f.4 = %f.4 \n",
+                similaritySize, similarityPosition, similarityHistogramm, similarityColor,
+                similaritySize + similarityPosition + similarityHistogramm + similarityColor );
+    }
     return similaritySize + similarityPosition + similarityHistogramm + similarityColor;
 }
 
@@ -664,7 +676,7 @@ void RegionTracker::assignRegions( MetaRegion & metaRegion) {
     }
 
 
-    metaRegion.matchOldAndNewRegions(matCurrentFrame, matching, currentFrame);
+    metaRegion.matchOldAndNewRegions(matCurrentFrame, matching, currentFrame, this);
 
     #ifdef DEBUGPRINT
     // Print matching
@@ -706,7 +718,7 @@ void RegionTracker::assignRegions( MetaRegion & metaRegion) {
  * Constraint: There can be at most one "1" in every row and column.
  * Bruteforce solution, as the arrays are fairly small.
  */
-void optimizeWeightSelection(int rows, int cols, double * const weightMatrix, int * selected){
+void optimizeWeightSelection(int rows, int cols, double const *  weightMatrix, int * selected){
     short selectedCells[rows];
     short temp_selectedCells[rows];
 
@@ -784,7 +796,7 @@ void optimizeWeightSelection(int rows, int cols, double * const weightMatrix, in
  * Create a matrix M in which is saved which regions are the most similiar to each other.
  * If M[i,j] == 1, then metaOldRegions[i] corresponds to metaNewRegion[j]
  */
-int *  MetaRegion::matchOldAndNewRegions(Mat frame, int * matching, int frameNum){
+int *  MetaRegion::matchOldAndNewRegions(Mat frame, int * matching, int frameNum, RegionTracker * rt){
 
     unsigned long oldRegionSize = metaOldRegions.size();
     unsigned long newRegionSize = metaNewRegions.size();
@@ -793,34 +805,56 @@ int *  MetaRegion::matchOldAndNewRegions(Mat frame, int * matching, int frameNum
 
     Region * currentOldRegion;
 
+
+    if(rt->analysisData) {
+        fprintf(rt->analysisDataFile, "matchOldAndNewRegion \n");
+    }
+
     // Calculate the weighted similarities for each of the Regions in the Meta Region
     for(int rowCounter = 0; rowCounter < oldRegionSize; ++rowCounter){
         currentOldRegion = metaOldRegions[rowCounter];
+
+        if(rt->analysisData) {
+            fprintf(rt->analysisDataFile, "Player %s: \n",  currentOldRegion->playerInRegion->identifier.c_str());
+        }
+
         for(int colCounter = 0; colCounter < metaNewRegions.size(); ++colCounter){
 
             matchingMatrix[(rowCounter * newRegionSize) + colCounter] =
-                    calcWeightedSimiliarity(currentOldRegion, metaNewRegions[colCounter], area, frame, frameNum);
+                    rt->calcWeightedSimiliarity(currentOldRegion, metaNewRegions[colCounter], area);
         }
     }
 
     // Print Matrix for debugging purposes
-    // TODO: Strange output here. Investigate
-#ifdef P2C_SHOW_MATCHING_MATRIX
-    cout << std::fixed << std::setw(5) << std::setprecision(4);
 
-    for(int rowCounter = 0; rowCounter < oldRegionSize; ++rowCounter){
-        currentOldRegion = metaOldRegions[rowCounter];
-        for(int colCounter = 0; colCounter < metaNewRegions.size(); ++colCounter){
+    if(rt->analysisData) {
 
-            cout  << matchingMatrix[(rowCounter * newRegionSize) + colCounter]<< " ";
+        for (int rowCounter = 0; rowCounter < oldRegionSize; ++rowCounter) {
+            currentOldRegion = metaOldRegions[rowCounter];
+            for (int colCounter = 0; colCounter < metaNewRegions.size(); ++colCounter) {
+
+                fprintf(rt->analysisDataFile, "%f.4 ",  matchingMatrix[(rowCounter * newRegionSize) + colCounter]);
+            }
+            fprintf(rt->analysisDataFile, "\n");
         }
-        cout << endl;
     }
-    cout.clear();
-#endif
+
+
 
     // Create a matrix which shows how the Regions correspond to each other.
     optimizeWeightSelection(metaOldRegions.size(), metaNewRegions.size(), matchingMatrix, matching);
+    if(rt->analysisData) {
+        fprintf(rt->analysisDataFile, "Selection: \n");
+        for (int rowCounter = 0; rowCounter < oldRegionSize; ++rowCounter) {
+            currentOldRegion = metaOldRegions[rowCounter];
+            fprintf( rt->analysisDataFile, "P %s: ", currentOldRegion->playerInRegion->identifier.c_str());
+            for (int colCounter = 0; colCounter < metaNewRegions.size(); ++colCounter) {
+
+                fprintf(rt->analysisDataFile, "%i ",  matching[(rowCounter * newRegionSize) + colCounter]);
+            }
+            fprintf(rt->analysisDataFile, "\n");
+        }
+    }
     return matching;
 }
 
@@ -873,7 +907,6 @@ void RegionTracker::interpretMetaRegions(vector<MetaRegion> & mr) {
     }
 
     // Try to find a matching Region for all the Regions which did not find a Partner.
-    Rect area;
     unsigned char * shirtColorOld, * shirtColorNew;
     double distance;
     int framesPassed;
@@ -1028,6 +1061,15 @@ void RegionTracker::enableVideoSave(const char *videoFilePath) {
 
 }
 
+void RegionTracker::setupAnalysisOutFile(const char * filename){
+
+    if(analysisData) {
+        if (analysisDataFile) fclose(analysisDataFile);
+        analysisDataFile = fopen(filename, "w");
+    }
+
+}
+
 
 FootballPlayer::FootballPlayer(Rect coordinate, int frame, string const & identifier) {
 
@@ -1098,12 +1140,8 @@ void FootballPlayer::update(Rect const &coordinates, int frame) {
 
     addPosition(coordinates, frame);
 
-    // Get the last 5 Frames to estimate the position.
-    int lookUpNFrames = 5;
 
     auto coordinatesIterator = this->coordinates.begin();
-    auto frameIterator = this->frames.begin();
-    if(numKnownFrames < lookUpNFrames) lookUpNFrames = numKnownFrames;
 
     Rect & lastPosition = * coordinatesIterator;
 
