@@ -43,7 +43,9 @@ int main(int argc, char *argv[]) {
     stringstream conv;
     char * video_path = argv[5];
 
-       RegionTracker rt;
+
+    RegionTracker rt;
+
     rt.trackVideo(video_path);
 
     /*

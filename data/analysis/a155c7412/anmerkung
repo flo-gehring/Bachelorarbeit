@@ -1,0 +1,20 @@
+ 
+TS_10_5_t01:
+    
+    Frame 137:
+        Player übernimmt AOI wegen Farbübereinstimmung
+    
+    Frame 142:
+        P4 wird zu P5 und in Frame 143 zu P12
+    
+    Frame 148:
+        P5 wird wieder korrekt identifiziert
+    
+    Frame 149:
+        P6 wird wieder korrekt identifiziert
+        
+    Frame 156:
+        P6 wird zwar richtigerweise nicht zugewiesen, wird aber mit einem wert von 2.6 stark mit P5 gleichgesetzt.
+        
+
+Farbe insgesamt sinnvoll ? 

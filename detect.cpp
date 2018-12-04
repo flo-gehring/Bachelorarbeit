@@ -12,8 +12,8 @@
 #define OUTFILE
 MatDetector::MatDetector(){
 
-    float nmsBoxesConfidenceThresh = 0.7;
-    float nmsBoxesParameter = 0.01;
+    nmsBoxesConfidenceThresh = 0.5f;
+    nmsBoxesParameter = 0.01f;
 
 
     fps = 0;
@@ -48,7 +48,9 @@ MatDetector::MatDetector(){
     demo_thresh = thresh;
     demo_hier = hier;
 
-    fs = std::fstream("aoi_out.date", std::fstream::out);
+
+
+    fs = std::fstream("video_aoi_out.data", std::fstream::out);
 
 
 
@@ -284,7 +286,7 @@ void DetectionFromFile::detect_and_display(cv::Mat inputMat) {
 
 DetectionFromFile::DetectionFromFile() : MatDetector(false){ // Not the Default Constuctor because we dont want to load the YOLO Config.
 
-    inFile = std::fstream("aoi_from_vid.data", std::fstream::in);
+    inFile = std::fstream("data/AOI/aoi_TS_10_5_t01.data", std::fstream::in);
 
     if(! inFile.is_open()) exit(8);
 

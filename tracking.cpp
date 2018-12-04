@@ -293,7 +293,7 @@ void RegionTracker::trackVideo(const char *filename) {
     while(! frame.empty()){
 
         if(analysisData){
-            fprintf(analysisDataFile, " \n ------------ \n Frame: %i: \n", currentFrame + 1);
+            fprintf(analysisDataFile, "------------ \n Frame: %i: \n", currentFrame + 1);
         }
         waitKey(30);
 
@@ -631,14 +631,12 @@ double RegionTracker::calcWeightedSimiliarity(Region  * oldRegion, Region *newRe
     //Histogram
     // http://answers.opencv.org/question/8154/question-about-histogram-comparison-return-value/
     // Return Value of CV_COMP_CORRELL: -1 is worst, 1 is best. -> Map to  [0,1]
-    /* Mat hist1, hist2;
+     Mat hist1, hist2;
     histFromRect(matCurrentFrame, oldRegion->coordinates, hist1);
     histFromRect(matCurrentFrame, newRegion->coordinates, hist2);
 
-
     similarityHistogramm = compareHist(hist1, hist2, CV_COMP_CORREL);
     similarityHistogramm = (similarityHistogramm / 2) + 0.5; // Map [-1,1] to [0,1]
-     */
 
     similarityHistogramm = 0;
     
@@ -654,15 +652,14 @@ double RegionTracker::calcWeightedSimiliarity(Region  * oldRegion, Region *newRe
         );
 
     similarityColor = (100 - similarityColor) / 100;
-
-    double weightedOverlap = double((2 * (oldRegion->coordinates & newRegion->coordinates).area())) / double((oldRegion->coordinates.area() + oldRegion->coordinates.area()));
+    similarityColor = 0;
 
     if(analysisData) {
         fprintf(analysisDataFile, "%.4f + %.4f + %.4f + %.4f = %.4f \n",
                 similaritySize, similarityPosition, similarityHistogramm, similarityColor,
                 similaritySize + similarityPosition + similarityHistogramm + similarityColor );
     }
-    return  weightedOverlap + similarityColor;
+    return similaritySize + similarityPosition + similarityHistogramm + similarityColor;
 }
 
 
@@ -696,7 +693,7 @@ void RegionTracker::assignRegions( MetaRegion & metaRegion) {
 #endif
 
     bool newRegionMatched;
-    for(int rowCounter = 0; rowCounter < metaRegion.metaOldRegions.size(); ++rowCounter){
+     for(int rowCounter = 0; rowCounter < metaRegion.metaOldRegions.size(); ++rowCounter){
         newRegionMatched = false;
         for(int colCounter = 0; colCounter < metaRegion.metaNewRegions.size(); ++colCounter){
             if(matching[(rowCounter * metaRegion.metaNewRegions.size()) + colCounter] == 1){
@@ -837,7 +834,7 @@ int *  MetaRegion::matchOldAndNewRegions(Mat frame, int * matching, int frameNum
             currentOldRegion = metaOldRegions[rowCounter];
             for (int colCounter = 0; colCounter < metaNewRegions.size(); ++colCounter) {
 
-                fprintf(rt->analysisDataFile, "%f.4 ",  matchingMatrix[(rowCounter * newRegionSize) + colCounter]);
+                fprintf(rt->analysisDataFile, "%.4f ",  matchingMatrix[(rowCounter * newRegionSize) + colCounter]);
             }
             fprintf(rt->analysisDataFile, "\n");
         }
@@ -1048,8 +1045,9 @@ RegionTracker::RegionTracker(const char *aoiFilePath, const char * videoPath) {
         strcpy(saveVideoPath, videoPath);
     }
     roiData = fopen(aoiFilePath, "w");
-    analysisDataFile = nullptr;
+
     analysisData = false;
+    analysisDataFile = nullptr;
 }
 
 RegionTracker::RegionTracker() {
@@ -1058,8 +1056,8 @@ RegionTracker::RegionTracker() {
     roiData = fopen("roidata.txt", "w");
     debugData = fopen("debugdata.txt", "w");
     saveVideoPath = new char[64];
-    analysisDataFile = nullptr;
     analysisData = false;
+    analysisDataFile = nullptr;
 }
 
 void RegionTracker::enableVideoSave(const char *videoFilePath) {
@@ -1067,17 +1065,15 @@ void RegionTracker::enableVideoSave(const char *videoFilePath) {
     saveVideo = true;
     strcpy(saveVideoPath, videoFilePath);
 
+
 }
 
 void RegionTracker::setupAnalysisOutFile(const char * filename){
-    analysisData = true;
-    if (analysisDataFile) fclose(analysisDataFile);
 
+    analysisData = true;
+
+    if (analysisDataFile) fclose(analysisDataFile);
     analysisDataFile = fopen(filename, "w");
-    if(! analysisDataFile) {
-            cerr << "RegionTracker: File for analysis data could not be opened" << endl;
-            exit(-8);
-        }
 
 
 }

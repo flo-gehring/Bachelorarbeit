@@ -57,11 +57,12 @@ public:
     // Switch to save Data about the decision making process
     bool analysisData;
     FILE * analysisDataFile;
+    void setupAnalysisOutFile(const char * filename);
+
 
 protected:
 
 
-    void setupAnalysisOutFile(const char * filename);
 
 
     vector<MetaRegion> calcMetaRegions();
@@ -90,8 +91,8 @@ protected:
     vector<Region> regionLastFrame;
 
     vector<FootballPlayer *> footballPlayers;
-
-    #ifdef UNDEF
+// PANORAMA2CUBEMAP_TRACKING_H
+    #ifdef PANORAMA2CUBEMAP_TRACKING_H
     DetectionFromFile darknetDetector;
     #else
     MatDetector darknetDetector;
