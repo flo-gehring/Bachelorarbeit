@@ -293,7 +293,7 @@ void RegionTracker::trackVideo(const char *filename) {
     while(! frame.empty()){
 
         if(analysisData){
-            fprintf(analysisDataFile, "------------ \n Frame: %i: \n", currentFrame + 1);
+            fprintf(analysisDataFile, " \n ------------ \n Frame: %i: \n", currentFrame + 1);
         }
         waitKey(30);
 
@@ -631,12 +631,14 @@ double RegionTracker::calcWeightedSimiliarity(Region  * oldRegion, Region *newRe
     //Histogram
     // http://answers.opencv.org/question/8154/question-about-histogram-comparison-return-value/
     // Return Value of CV_COMP_CORRELL: -1 is worst, 1 is best. -> Map to  [0,1]
-     Mat hist1, hist2;
+    /* Mat hist1, hist2;
     histFromRect(matCurrentFrame, oldRegion->coordinates, hist1);
     histFromRect(matCurrentFrame, newRegion->coordinates, hist2);
 
+
     similarityHistogramm = compareHist(hist1, hist2, CV_COMP_CORREL);
     similarityHistogramm = (similarityHistogramm / 2) + 0.5; // Map [-1,1] to [0,1]
+     */
 
     similarityHistogramm = 0;
     
@@ -653,12 +655,14 @@ double RegionTracker::calcWeightedSimiliarity(Region  * oldRegion, Region *newRe
 
     similarityColor = (100 - similarityColor) / 100;
 
+    double weightedOverlap = double((2 * (oldRegion->coordinates & newRegion->coordinates).area())) / double((oldRegion->coordinates.area() + oldRegion->coordinates.area()));
+
     if(analysisData) {
-        fprintf(analysisDataFile, "%f.4 + %f.4 + %f.4 + %f.4 = %f.4 \n",
+        fprintf(analysisDataFile, "%.4f + %.4f + %.4f + %.4f = %.4f \n",
                 similaritySize, similarityPosition, similarityHistogramm, similarityColor,
                 similaritySize + similarityPosition + similarityHistogramm + similarityColor );
     }
-    return similaritySize + similarityPosition + similarityHistogramm + similarityColor;
+    return  weightedOverlap + similarityColor;
 }
 
 
@@ -1044,6 +1048,8 @@ RegionTracker::RegionTracker(const char *aoiFilePath, const char * videoPath) {
         strcpy(saveVideoPath, videoPath);
     }
     roiData = fopen(aoiFilePath, "w");
+    analysisDataFile = nullptr;
+    analysisData = false;
 }
 
 RegionTracker::RegionTracker() {
@@ -1052,6 +1058,8 @@ RegionTracker::RegionTracker() {
     roiData = fopen("roidata.txt", "w");
     debugData = fopen("debugdata.txt", "w");
     saveVideoPath = new char[64];
+    analysisDataFile = nullptr;
+    analysisData = false;
 }
 
 void RegionTracker::enableVideoSave(const char *videoFilePath) {
@@ -1062,11 +1070,15 @@ void RegionTracker::enableVideoSave(const char *videoFilePath) {
 }
 
 void RegionTracker::setupAnalysisOutFile(const char * filename){
+    analysisData = true;
+    if (analysisDataFile) fclose(analysisDataFile);
 
-    if(analysisData) {
-        if (analysisDataFile) fclose(analysisDataFile);
-        analysisDataFile = fopen(filename, "w");
-    }
+    analysisDataFile = fopen(filename, "w");
+    if(! analysisDataFile) {
+            cerr << "RegionTracker: File for analysis data could not be opened" << endl;
+            exit(-8);
+        }
+
 
 }
 
