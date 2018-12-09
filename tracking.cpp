@@ -628,17 +628,7 @@ double RegionTracker::calcWeightedSimiliarity(Region  * oldRegion, Region *newRe
     double lengthVector = sqrt(pow(positionOldRegion.x - newRegion->coordinates.x, 2) + pow(positionOldRegion.y - newRegion->coordinates.y, 2));
     similarityPosition = (hypotenuseMetaRegion - lengthVector) / hypotenuseMetaRegion;
 
-    //Histogram
-    // http://answers.opencv.org/question/8154/question-about-histogram-comparison-return-value/
-    // Return Value of CV_COMP_CORRELL: -1 is worst, 1 is best. -> Map to  [0,1]
-     Mat hist1, hist2;
-    histFromRect(matCurrentFrame, oldRegion->coordinates, hist1);
-    histFromRect(matCurrentFrame, newRegion->coordinates, hist2);
 
-    similarityHistogramm = compareHist(hist1, hist2, CV_COMP_CORREL);
-    similarityHistogramm = (similarityHistogramm / 2) + 0.5; // Map [-1,1] to [0,1]
-
-    similarityHistogramm = 0;
     
     // Color
     // CIE94 Formula. If the difference has a value greater than 100, similarityColor turns negative.
@@ -652,14 +642,16 @@ double RegionTracker::calcWeightedSimiliarity(Region  * oldRegion, Region *newRe
         );
 
     similarityColor = (100 - similarityColor) / 100;
-    similarityColor = 0;
+
+    double sharedArea = (oldRegion->coordinates & newRegion->coordinates).area();
+    double similiarityOverlap = (sharedArea / oldRegion->coordinates.area()) + (sharedArea / newRegion->coordinates.area());
 
     if(analysisData) {
-        fprintf(analysisDataFile, "%.4f + %.4f + %.4f + %.4f = %.4f \n",
-                similaritySize, similarityPosition, similarityHistogramm, similarityColor,
-                similaritySize + similarityPosition + similarityHistogramm + similarityColor );
+        fprintf(analysisDataFile, "%.4f + %.4f = %.4f \n",
+                similiarityOverlap, similarityColor,
+                similiarityOverlap + similarityColor );
     }
-    return similaritySize + similarityPosition + similarityHistogramm + similarityColor;
+    return similiarityOverlap + similarityColor;
 }
 
 
@@ -677,7 +669,48 @@ void RegionTracker::assignRegions( MetaRegion & metaRegion) {
     }
 
 
-    metaRegion.matchOldAndNewRegions(matCurrentFrame, matching, currentFrame, this);
+
+    // Calculate how well every detected Regions matches against each other.
+    // Indices of the first vector match the regions detected in the current Frame,
+    // the indices matching the regions detected in the last Frame are saved in the tuple, along with how well they
+    // match the new Region.
+    vector<vector<tuple<int, double >>> matchingScores;
+
+    for(Region * newRegion : metaRegion.metaNewRegions){
+        matchingScores.emplace_back(vector<tuple<int, double>>());
+        for(int index = 0; index < metaRegion.metaOldRegions.size(); ++index){
+            matchingScores.back().emplace_back(tuple<int, double>(index, calcWeightedSimiliarity(
+                    metaRegion.metaOldRegions[index],
+                    newRegion,
+                    metaRegion.area
+                    )));
+        }
+    }
+
+    // Sort by how well they match
+
+    auto scoreSelector = [&](tuple<int, double> t1, tuple<int, double> t2){
+        return get<1>(t1) < get<1>(t2);
+    };
+    for(vector<tuple<int, double>> & scores: matchingScores){
+        sort(scores.begin(), scores.end(), scoreSelector);
+    }
+
+    for(vector<tuple<int, double>> & scores : matchingScores){
+
+        if(scores.size() > 1){
+            if( get<1>(scores[0]) > 2 && get<1>(scores[0]) - get<1>(scores[1]) > 1.5f){
+
+                // Check if no other Region matches this region
+                for(vector<tuple<int, double>> & check : matchingScores){
+                    if( &scores != &check && get<0>(check[0]) == get<0>(scores[0])){
+                        cerr << "Oh no, two match the same region" << endl;
+                    }
+                }
+            }
+        }
+
+    }
 
     #ifdef DEBUGPRINT
     // Print matching
