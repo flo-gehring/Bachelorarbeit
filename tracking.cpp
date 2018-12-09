@@ -129,7 +129,7 @@ vector<Rect> RegionTracker::detectOnFrame(Mat  & frame) {
     for(int faceId = 0; faceId < numOfFaces; ++faceId){
         createCubeMapFace(frame, face, faceId, sideLength, sideLength);
         darknetDetector.detect_and_display(face);
-        cout << "FaceSide" << faceId << endl;
+
 
 
         for (auto detectedObjects = darknetDetector.found.begin();
@@ -138,11 +138,6 @@ vector<Rect> RegionTracker::detectOnFrame(Mat  & frame) {
             tmpDetected[faceId].push_back((*detectedObjects).rect);
             scores[faceId].push_back((*detectedObjects).prob);
             ++countDetectedBoxes;
-
-            printf("(%i,%i,%i,%i) \n", (*detectedObjects).rect.x, (*detectedObjects).rect.y, (*detectedObjects).rect.width, (*detectedObjects).rect.height);
-            cout << endl;
-
-
             }
 
 
@@ -296,8 +291,6 @@ void RegionTracker::trackVideo(const char *filename) {
             fprintf(analysisDataFile, "------------ \n Frame: %i: \n", currentFrame + 1);
         }
         waitKey(30);
-
-        cout << "Frame No.: "<< frameCounter << endl;
         matCurrentFrame = frame;
 
         update(frame);
@@ -662,13 +655,11 @@ double RegionTracker::calcWeightedSimiliarity(Region  * oldRegion, Region *newRe
  */
 void RegionTracker::assignRegions( MetaRegion & metaRegion) {
 
-    // Create and Initalize Array filled with zeroes.
-    int  matching[metaRegion.metaNewRegions.size() * metaRegion.metaOldRegions.size()];
-    for(int it = 0; it < metaRegion.metaOldRegions.size() * metaRegion.metaNewRegions.size(); ++it){
-        matching[it] = 0;
-    }
+    double assignmentThreshold = 1.0f;
+    double minDistanceThreshold = 0.7f;
 
-
+    set<int> indicesUnassignedOld;
+    for (int i=0; i < metaRegion.metaOldRegions.size(); i++) indicesUnassignedOld.insert(i);
 
     // Calculate how well every detected Regions matches against each other.
     // Indices of the first vector match the regions detected in the current Frame,
@@ -690,27 +681,106 @@ void RegionTracker::assignRegions( MetaRegion & metaRegion) {
     // Sort by how well they match
 
     auto scoreSelector = [&](tuple<int, double> t1, tuple<int, double> t2){
-        return get<1>(t1) < get<1>(t2);
+        return get<1>(t1) > get<1>(t2);
     };
     for(vector<tuple<int, double>> & scores: matchingScores){
+
         sort(scores.begin(), scores.end(), scoreSelector);
-    }
 
-    for(vector<tuple<int, double>> & scores : matchingScores){
-
-        if(scores.size() > 1){
-            if( get<1>(scores[0]) > 2 && get<1>(scores[0]) - get<1>(scores[1]) > 1.5f){
-
-                // Check if no other Region matches this region
-                for(vector<tuple<int, double>> & check : matchingScores){
-                    if( &scores != &check && get<0>(check[0]) == get<0>(scores[0])){
-                        cerr << "Oh no, two match the same region" << endl;
-                    }
-                }
+        if(analysisData) {
+            for (tuple<int, double> const &t : scores) {
+                fprintf(analysisDataFile,"(%i, %.4f), ", get<0>(t), get<1>(t));
             }
+            fprintf(analysisDataFile, "\n");
         }
 
     }
+
+    bool ambiguous;
+    int newRegionIndex = 0;
+    for(vector<tuple<int, double>> & scores : matchingScores){
+        ambiguous = false;
+        if(scores.size() > 1){
+            if( get<1>(scores[0]) > assignmentThreshold && get<1>(scores[0]) - get<1>(scores[1]) > minDistanceThreshold){
+
+                // Check if no other Region matches this region
+                for(vector<tuple<int, double>> & check : matchingScores){
+                    if( &scores != &check && get<0>(check[0]) == get<0>(scores[0]) && get<1>(check[0]) > assignmentThreshold){
+
+                        if(analysisData) fprintf(analysisDataFile, "Two Regions match the same! \n" );
+
+                        ambiguous = true;
+                    }
+                }
+
+                if(! ambiguous){
+                    FootballPlayer * playerInRegion = metaRegion.metaOldRegions[get<0>(scores[0])]->playerInRegion;
+                    metaRegion.metaNewRegions[newRegionIndex]->playerInRegion = playerInRegion;
+
+                    indicesUnassignedOld.erase(get<0>(scores[0]));
+
+                    deleteFromOutOfSight(playerInRegion);
+
+                }
+                else{ // If the selection is ambiguous, we never want to hear from the players again. Delete the Regions from out of sight.
+                    deleteFromOutOfSight(metaRegion.metaOldRegions[get<0>(scores[0])]->playerInRegion);
+                    indicesUnassignedOld.erase(get<0>(scores[0]));
+
+                }
+            }
+
+        }
+
+        ++newRegionIndex;
+    }
+
+    // Add the regions who are left to outofsight Regions
+    for(int index : indicesUnassignedOld){
+        addToOutOfSight(metaRegion.metaOldRegions[index]);
+    }
+
+    // Find Players who are maybe out of sight
+
+    for(Region * r: metaRegion.metaNewRegions) {
+
+        if(! r->playerInRegion) {
+
+
+            FootballPlayer * matchingOutOfSight = nullptr;
+
+            vector<Region *> nearbyPlayers;
+
+
+            for(Region * oofsr: outOfSightRegions){
+                unsigned char * labShirtColorPlayer = oofsr->labShirtColor;
+                unsigned char * labShirtColorRegion = r->labShirtColor;
+
+                double colorSimiliarity = deltaECIE94(labShirtColorPlayer[0], labShirtColorPlayer[1], labShirtColorPlayer[2],
+                                                      labShirtColorRegion[0], labShirtColorRegion[1], labShirtColorRegion[2]);
+                if(Region::regionsInRelativeProximity(* oofsr, *r, currentFrame - oofsr->playerInRegion->frames.back())
+                && colorSimiliarity < 30)
+                    nearbyPlayers.push_back(oofsr);
+            }
+
+            if(nearbyPlayers.size() == 1){
+                matchingOutOfSight = nearbyPlayers[0]->playerInRegion;
+            }
+
+            if(matchingOutOfSight){
+                r->playerInRegion = matchingOutOfSight;
+                deleteFromOutOfSight(matchingOutOfSight);
+
+                for(Region * oofsr: outOfSightRegions) assert(matchingOutOfSight != oofsr->playerInRegion);
+            }
+            else {
+                r->playerInRegion = createNewFootballPlayer(r->coordinates);
+            }
+        }
+    }
+
+    for(Region * r: metaRegion.metaNewRegions) assert(r->playerInRegion);
+
+
 
     #ifdef DEBUGPRINT
     // Print matching
@@ -725,25 +795,7 @@ void RegionTracker::assignRegions( MetaRegion & metaRegion) {
             }
 #endif
 
-    bool newRegionMatched;
-     for(int rowCounter = 0; rowCounter < metaRegion.metaOldRegions.size(); ++rowCounter){
-        newRegionMatched = false;
-        for(int colCounter = 0; colCounter < metaRegion.metaNewRegions.size(); ++colCounter){
-            if(matching[(rowCounter * metaRegion.metaNewRegions.size()) + colCounter] == 1){
-                newRegionMatched = true;
-                metaRegion.metaNewRegions[colCounter]->playerInRegion = metaRegion.metaOldRegions[rowCounter]->playerInRegion;
 
-                // If the oldRegion was part of outOfSight Regions, delete it from there
-                deleteFromOutOfSight(metaRegion.metaOldRegions[rowCounter]->playerInRegion);
-                break;
-            }
-
-        }
-        if(!newRegionMatched){ // Add to out of sight Regions, if it's not already there
-            addToOutOfSight(metaRegion.metaOldRegions[rowCounter]);
-
-        }
-    }
 
 }
 

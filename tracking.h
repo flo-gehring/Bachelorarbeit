@@ -63,9 +63,6 @@ public:
 
 protected:
 
-
-
-
     vector<MetaRegion> calcMetaRegions();
     void interpretMetaRegions(vector<MetaRegion> & mr);
     void assignRegions(MetaRegion  & metaRegion);
@@ -87,6 +84,7 @@ protected:
 
     vector<Region *> outOfSightRegions;
     vector<Region *> noMatchFound;
+
 
     vector<Region> regionsNewFrame;
     vector<Region> regionLastFrame;
