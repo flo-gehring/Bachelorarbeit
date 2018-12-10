@@ -664,7 +664,8 @@ void RegionTracker::assignRegions( MetaRegion & metaRegion) {
 
         if(analysisData) {
             for (tuple<int, double> const &t : scores) {
-                fprintf(analysisDataFile,"(%i, %.4f), ", get<0>(t), get<1>(t));
+                const char * playerId = metaRegion.metaOldRegions[get<0>(t)]->playerInRegion->identifier.c_str();
+                fprintf(analysisDataFile,"(%s, %.4f), ", playerId, get<1>(t));
             }
             fprintf(analysisDataFile, "\n");
         }
@@ -694,6 +695,9 @@ void RegionTracker::assignRegions( MetaRegion & metaRegion) {
                         // If the selection is ambiguous, we never want to hear from the players again. Delete the Regions from out of sight.
                         ambiguousRegions.insert(get<0>(check[0]));
                         ambiguousRegions.insert(get<0>(scores[0]));
+
+                        indicesUnassignedOld.erase(get<0>(check[0]));
+                        indicesUnassignedOld.erase(get<0>(scores[0]));
 
                     }
 
