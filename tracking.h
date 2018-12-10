@@ -52,7 +52,7 @@ public:
 
     FILE * roiData;
     FILE * debugData;
-    double calcWeightedSimiliarity(Region  * oldRegion, Region *newRegion, Rect area);
+    double calcWeightedSimiliarity(const Region  * oldRegion, const Region *newRegion, Rect area);
 
 
     // Switch to save Data about the decision making process

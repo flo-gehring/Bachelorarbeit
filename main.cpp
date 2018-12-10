@@ -45,7 +45,8 @@ int main(int argc, char *argv[]) {
 
 
     RegionTracker rt;
-
+    // rt.setupAnalysisOutFile("sorting.data");
+    // rt.enableVideoSave("sorting.mp4");
     rt.trackVideo(video_path);
 
     /*
