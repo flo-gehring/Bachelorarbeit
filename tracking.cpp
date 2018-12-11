@@ -759,7 +759,10 @@ void RegionTracker::assignRegions( MetaRegion & metaRegion) {
 
     // Players who were ambiguous should not be considered again
     for(int index: ambiguousRegions){
+
         FootballPlayer * ambiguousPlayer = metaRegion.metaOldRegions[index]->playerInRegion;
+
+        occludedPlayers.erase(ambiguousPlayer);
         deleteFromOutOfSight(ambiguousPlayer);
         indicesUnassignedOld.erase(index);
     }
