@@ -22,6 +22,8 @@
 #include <cmath>
 #include <iomanip>
 #include <stdio.h>
+
+#include <unordered_map>
 #include <unordered_set>
 #include <tuple>
 #include <algorithm>
@@ -82,14 +84,19 @@ protected:
     void drawOnFrame(Mat frame, vector<MetaRegion> const & mr);
     void printInfo(vector<MetaRegion> const &);
 
+
+    // Data Storage
     vector<Region *> outOfSightRegions;
     vector<Region *> noMatchFound;
-
 
     vector<Region> regionsNewFrame;
     vector<Region> regionLastFrame;
 
     vector<FootballPlayer *> footballPlayers;
+
+    unordered_map<FootballPlayer *, FootballPlayer *> occludedPlayers;
+
+
 // PANORAMA2CUBEMAP_TRACKING_H
     #ifdef PANORAMA2CUBEMAP_TRACKING_H
     DetectionFromFile darknetDetector;

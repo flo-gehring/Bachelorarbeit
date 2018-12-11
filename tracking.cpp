@@ -757,21 +757,36 @@ void RegionTracker::assignRegions( MetaRegion & metaRegion) {
 
     }
 
-    // Add the regions who are left to outofsight Regions
+    // Players who were ambiguous should not be considered again
     for(int index: ambiguousRegions){
         FootballPlayer * ambiguousPlayer = metaRegion.metaOldRegions[index]->playerInRegion;
         deleteFromOutOfSight(ambiguousPlayer);
-
         indicesUnassignedOld.erase(index);
     }
 
 
+    // Add the regions who are left to outofsight Regions
+    Region * unassignedRegion;
+    bool behindPlayer;
     for(int index : indicesUnassignedOld){
-        addToOutOfSight(metaRegion.metaOldRegions[index]);
+        unassignedRegion = metaRegion.metaOldRegions[index];
+        behindPlayer = false;
+        for(Region * regionWithPlayer : metaRegion.metaNewRegions){
+            if(regionWithPlayer->playerInRegion &&
+            Region::regionsInRelativeProximity(*regionWithPlayer, *unassignedRegion, 1)){
+
+                occludedPlayers.insert(make_pair(regionWithPlayer->playerInRegion, unassignedRegion->playerInRegion));
+                behindPlayer = true;
+                break;
+            }
+        }
+
+        if(! behindPlayer)
+            addToOutOfSight(unassignedRegion);
     }
 
     // Find Players who are maybe out of sight
-
+    double colorSimiliarity;
     for(Region * r: metaRegion.metaNewRegions) {
 
         if(! r->playerInRegion) {
@@ -779,22 +794,32 @@ void RegionTracker::assignRegions( MetaRegion & metaRegion) {
 
             FootballPlayer * matchingOutOfSight = nullptr;
 
-            vector<Region *> nearbyPlayers;
+            vector<FootballPlayer *> nearbyPlayers;
 
 
             for(Region * oofsr: outOfSightRegions){
                 unsigned char * labShirtColorPlayer = oofsr->labShirtColor;
                 unsigned char * labShirtColorRegion = r->labShirtColor;
 
-                double colorSimiliarity = deltaECIE94(labShirtColorPlayer[0], labShirtColorPlayer[1], labShirtColorPlayer[2],
+                colorSimiliarity = deltaECIE94(labShirtColorPlayer[0], labShirtColorPlayer[1], labShirtColorPlayer[2],
                                                       labShirtColorRegion[0], labShirtColorRegion[1], labShirtColorRegion[2]);
                 if(Region::regionsInRelativeProximity(* oofsr, *r, 2) // TODO: This caused a bug because it matched a region which was in another meta region!
                 && colorSimiliarity < 30)
-                    nearbyPlayers.push_back(oofsr);
+                    nearbyPlayers.push_back(oofsr->playerInRegion);
+            }
+
+            for(auto playerPair: occludedPlayers){
+
+                if(Region::regionsInRelativeProximity(Region(playerPair.first->coordinates.back()), *r, 2) &&
+                nearbyPlayers.size() == 0){
+                    nearbyPlayers.push_back(playerPair.second);
+                    occludedPlayers.erase(playerPair.first);
+                    break;
+                }
             }
 
             if(nearbyPlayers.size() == 1){
-                matchingOutOfSight = nearbyPlayers[0]->playerInRegion;
+                matchingOutOfSight = nearbyPlayers[0];
             }
 
             if(matchingOutOfSight){
@@ -824,7 +849,7 @@ void RegionTracker::assignRegions( MetaRegion & metaRegion) {
                 }
                 cout << endl;
             }
-#endif
+    #endif
 
 
 
