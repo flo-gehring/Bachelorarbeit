@@ -29,8 +29,10 @@ int RegionTracker::initialize(Mat frame) {
     for (Region * r: outOfSightRegions){
         delete r;
     }
-    outOfSightRegions.clear(); // Cleanup complete.
+    outOfSightRegions.clear();
+    occludedPlayers.clear(); // Cleanup complete.
 
+    objectCounter = 0;
     currentFrame = 0;
     matCurrentFrame = frame;
 
@@ -1653,5 +1655,3 @@ void helperBGRKMean(Mat const &frame, int clusterCount, Mat &labels, Mat &center
         }
 #endif
 }
-
-
