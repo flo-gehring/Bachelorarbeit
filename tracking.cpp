@@ -613,6 +613,8 @@ double RegionTracker::calcWeightedSimiliarity(const Region  * oldRegion, const R
     double sharedArea = (oldRegion->coordinates & newRegion->coordinates).area();
     double similarityOverlap = (sharedArea / oldRegion->coordinates.area()) + (sharedArea / newRegion->coordinates.area());
 
+    similarityColor = (similarityOverlap == 0)? 0: similarityColor;
+
     if(analysisData) {
         fprintf(analysisDataFile, "%.4f + %.4f = %.4f \n",
                 similarityOverlap, similarityColor,
