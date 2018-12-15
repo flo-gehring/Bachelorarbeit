@@ -98,10 +98,14 @@ void remember_network(network *net);
 detection *avg_predictions(network *net, int *nboxes);
 
 void print_detections(image im, detection *dets, int num);
+virtual void loadAOI(std::string filename);
+
 
 protected:
 std::fstream fs;
 MatDetector(bool);
+
+
 
 
 };
@@ -111,10 +115,12 @@ class DetectionFromFile : public MatDetector{
 public:
     DetectionFromFile();
 
+    std::string aoiInFile;
+
     void detect_and_display(cv::Mat inputMat) override;
     std::vector<AbsoluteBoundingBoxes> found;
 
-
+    void loadAOI(std::string filename);
 
 
 private:

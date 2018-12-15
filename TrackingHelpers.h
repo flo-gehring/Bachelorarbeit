@@ -63,11 +63,16 @@ public:
     Mat hist; // Histogramm of the Player when he was first detected.
     Mat bgrShirtColor;
 
+    bool isAmbiguous;
+
 };
+
+
 
 
 class Region{
 public:
+    Region() = default;
     Region(const Rect &coordinates,  FootballPlayer * ptrPlayer);
     Region(Rect coordinates);
     Region(Region const & r1);

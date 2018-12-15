@@ -45,27 +45,39 @@ int main(int argc, char *argv[]) {
 
 
     RegionTracker rt;
-    // rt.setupAnalysisOutFile("sorting.data");
     // rt.enableVideoSave("sorting.mp4");
-    rt.trackVideo(video_path);
+    // rt.trackVideo(video_path);
 
-    /*
+
     string prefix = "/home/flo/Videos/";
 
     string videonames[] = {
-            "Video2.mp4",
-            "TS_10_5_t01.mp4",
-            "TS_10_5.mp4"
+           // "Video2.mp4",
+            "TS_10_5.mp4",
+           //"TS_10_5_t01.mp4"
     };
 
-    RegionTracker rt;
+    string AOIFiles[] = {
+            //"data/AOI/aoi_from_vid.data",
+            "data/AOI/aoi_TS_10_5_lang.data",
+            "data/AOI/aoi_TS_10_5_t01.data"
 
+    };
+
+
+    int i = 0;
     for(string const & s : videonames){
-        rt.enableVideoSave(("tracked_" + s).c_str());
-        rt.setAOIFile(("aoi_" + s + ".csv").c_str());
+       // rt.enableVideoSave(("hmm_" + s).c_str());
+       // rt.setAOIFile(("hmm_" + s + ".csv").c_str());
+        //rt.setupAnalysisOutFile(("hmm_analysis_" + s +   ".data").c_str());
+
+        rt.darknetDetector.loadAOI("video_aoi_out.data");
         rt.trackVideo((prefix+s).c_str());
+        cout << s << " finished.." << endl;
+
+        ++i;
     }
-     */
+
 
 
     VideoCapture vc(video_path);

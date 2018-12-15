@@ -62,6 +62,12 @@ public:
     FILE * analysisDataFile;
     void setupAnalysisOutFile(const char * filename);
 
+    // PANORAMA2CUBEMAP_TRACKING_H
+#ifdef PANORAMA2CUBEMAP_TRACKING_H
+    DetectionFromFile darknetDetector;
+#else
+    MatDetector darknetDetector;
+#endif
 
 protected:
 
@@ -69,6 +75,8 @@ protected:
     void interpretMetaRegions(vector<MetaRegion> & mr);
     void assignRegions(MetaRegion  & metaRegion);
     FootballPlayer * createNewFootballPlayer(Rect const &);
+    FootballPlayer * createAmbiguousPlayer(Rect const &);
+
     vector<Rect> detectOnFrame(Mat  & frame);
 
 
@@ -97,12 +105,7 @@ protected:
     unordered_map<FootballPlayer *, FootballPlayer *> occludedPlayers;
 
 
-// PANORAMA2CUBEMAP_TRACKING_H
-    #ifdef PANORAMA2CUBEMAP_TRACKING_H
-    DetectionFromFile darknetDetector;
-    #else
-    MatDetector darknetDetector;
-    #endif
+
 
     int objectCounter = 0;
     int currentFrame = 0;

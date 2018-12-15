@@ -238,6 +238,11 @@ MatDetector::MatDetector(bool) {
 
 }
 
+// Placeholder
+void MatDetector::loadAOI(std::string filename) {
+
+}
+
 
 image ipl_to_image(IplImage* src)
 {
@@ -284,9 +289,19 @@ void DetectionFromFile::detect_and_display(cv::Mat inputMat) {
 
 }
 
+
+
 DetectionFromFile::DetectionFromFile() : MatDetector(false){ // Not the Default Constuctor because we dont want to load the YOLO Config.
 
-    inFile = std::fstream("data/AOI/aoi_TS_10_5_t01.data", std::fstream::in);
+    loadAOI("data/AOI/Video2Aoi.data");
+}
+
+void DetectionFromFile::loadAOI(std::string filename) {
+
+    boundingBoxes.clear();
+
+    aoiInFile = "data/AOI/aoi_TS_10_5_lang.data";
+    inFile = std::fstream(aoiInFile, std::fstream::in);
 
     if(! inFile.is_open()) exit(8);
 
@@ -326,9 +341,6 @@ DetectionFromFile::DetectionFromFile() : MatDetector(false){ // Not the Default 
 
 
     frameCounter = 0;
-
-
-
 }
 
 

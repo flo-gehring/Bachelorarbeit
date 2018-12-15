@@ -3,6 +3,8 @@
 //
 
 #include "tracking.h"
+#include "TrackingHelpers.h"
+
 #include <set>
 
 
@@ -88,10 +90,6 @@ bool RegionTracker::update(Mat frame) {
 
     vector<MetaRegion> vectorMetaRegion = calcMetaRegions();
     interpretMetaRegions(vectorMetaRegion);
-    for(Region * r1:outOfSightRegions){
-        for (Region const & r2 : regionsNewFrame) assert(r1->playerInRegion != r2.playerInRegion);
-    }
-
 
 
     for(Region & newRegion: regionsNewFrame) newRegion.updatePlayerInRegion(currentFrame);
@@ -615,12 +613,36 @@ double RegionTracker::calcWeightedSimiliarity(const Region  * oldRegion, const R
 
     similarityColor = (similarityOverlap == 0)? 0: similarityColor;
 
+    double similarityPosition;
+
+    double similaritySize = double(oldRegion->coordinates.area()) / double(newRegion->coordinates.area());
+    similaritySize = (similaritySize > 1)? similaritySize: 1 / similaritySize;
+    similaritySize = (similarityOverlap == 0)? 0: similaritySize;
+
+    const Rect & oldRect = oldRegion->coordinates;
+    const Rect & newRect = newRegion->coordinates;
+
+    auto pythagoras = [](double a, double b) -> double {
+        return sqrt(pow(a, 2) + pow(b,2));
+    };
+
+    double maxDistance = pythagoras(area.height, area.width);
+
+    double vectorX = oldRect.x - newRect.x;
+    double vectorY = oldRect.y - newRect.y;
+
+    similarityPosition = pythagoras(vectorX, vectorY) / maxDistance;
+
     if(analysisData) {
         fprintf(analysisDataFile, "%.4f + %.4f = %.4f \n",
                 similarityOverlap, similarityColor,
                 similarityOverlap + similarityColor );
     }
-    return similarityOverlap + similarityColor;
+
+    int framesDifference = (currentFrame - oldRegion->playerInRegion->frames.back());
+
+
+    return similaritySize + (similarityOverlap / framesDifference);
 }
 
 
@@ -632,9 +654,21 @@ double RegionTracker::calcWeightedSimiliarity(const Region  * oldRegion, const R
 void RegionTracker::assignRegions( MetaRegion & metaRegion) {
 
     double assignmentThreshold = 1.0f;
-    double minDistanceThreshold = 0.7f;
+    double minDistanceThreshold = 0.3f;
 
     set<int> indicesUnassignedOld;
+    set<FootballPlayer *> playersAssignedInThisFrame;
+
+
+    auto searchForValue = [&](unordered_map<FootballPlayer *, FootballPlayer *> occluded, FootballPlayer * searchFor) -> FootballPlayer *{
+
+        for(auto pair: occluded){
+            if(pair.second == searchFor) return pair.first;
+        }
+        return nullptr;
+
+    };
+
     for (int i=0; i < metaRegion.metaOldRegions.size(); i++) indicesUnassignedOld.insert(i);
 
     set<int> ambiguousRegions;
@@ -677,45 +711,96 @@ void RegionTracker::assignRegions( MetaRegion & metaRegion) {
     }
 
     bool ambiguous;
+    bool otherMatchesBetter;
     int newRegionIndex = 0;
     if (metaRegion.metaOldRegions.size() > 1) {
         for (vector<tuple<int, double>> &scores : matchingScores) {
 
+            double scoreThisRegion = get<1>(scores[0]);
             ambiguous = false;
-            if (get<1>(scores[0]) > assignmentThreshold &&
-                get<1>(scores[0]) - get<1>(scores[1]) > minDistanceThreshold &&
-                ambiguousRegions.count(get<0>(scores[0])) == 0) {
+            otherMatchesBetter = false;
 
+
+            Region * newRegion = metaRegion.metaNewRegions[newRegionIndex];
+
+            if (scoreThisRegion > assignmentThreshold &&
+                scoreThisRegion - get<1>(scores[1]) <= minDistanceThreshold){
+
+                ambiguousRegions.insert(get<0>(scores[0]));
+                ambiguousRegions.insert(get<0>(scores[1]));
+
+                indicesUnassignedOld.erase(get<0>(scores[0]));
+                indicesUnassignedOld.erase(get<0>(scores[1]));
+
+                newRegion->playerInRegion = createAmbiguousPlayer(newRegion->coordinates);
+
+            }
+            else if(ambiguousRegions.count(get<0>(scores[0]) == 1)){
+
+                newRegion->playerInRegion = createAmbiguousPlayer(newRegion->coordinates);
+
+            }
+            else if (scoreThisRegion > assignmentThreshold) {
+                double  scoreOtherRegion;
                 // Check if no other Region matches this region
                 for (vector<tuple<int, double>> &check : matchingScores) {
+                    scoreOtherRegion = get<1>(check[0]);
+
+                    int idBestMatchOther = get<0>(check[0]);
+                    int idBestMatchThis = get<0>(scores[0]);
 
                     if ((&scores != &check) &&
                         get<0>(check[0]) == get<0>(scores[0]) &&
-                        abs(get<1>(check[0]) - get<1>(scores[0])) > minDistanceThreshold &&
-                        get<1>(check[0]) > assignmentThreshold) {
+                            scoreOtherRegion > assignmentThreshold){
 
+                        bool tooClose = abs(scoreOtherRegion - scoreThisRegion) < minDistanceThreshold;
 
-                        ambiguous = true;
-                        // If the selection is ambiguous, we never want to hear from the players again. Delete the Regions from out of sight.
-                        ambiguousRegions.insert(get<0>(check[0]));
-                        ambiguousRegions.insert(get<0>(scores[0]));
+                        if(! tooClose && scoreThisRegion > scoreOtherRegion){
 
-                        indicesUnassignedOld.erase(get<0>(check[0]));
-                        indicesUnassignedOld.erase(get<0>(scores[0]));
+                            // Do nothing. Assignment can continue as normal-
+                        }
+                        else if(! tooClose && scoreOtherRegion > scoreThisRegion){
+                            otherMatchesBetter = true;
+                        }
+                        else{
+                            ambiguous = true;
+                            // If the selection is ambiguous, we never want to hear from the players again. Delete the Regions from out of sight.
+                            // TODO : make function wit above code
+                            ambiguousRegions.insert(idBestMatchOther);
+                            ambiguousRegions.insert(idBestMatchThis);
 
-                    }
+                            indicesUnassignedOld.erase(idBestMatchOther);
+                            indicesUnassignedOld.erase(idBestMatchThis);
+                        }
 
+                        }
                 }
 
+                FootballPlayer *playerInRegion = metaRegion.metaOldRegions[get<0>(scores[0])]->playerInRegion;
+
+                if(otherMatchesBetter) break;
+
                 if (!ambiguous) {
-                    FootballPlayer *playerInRegion = metaRegion.metaOldRegions[get<0>(scores[0])]->playerInRegion;
+
+                    if(playerInRegion->isAmbiguous) playerInRegion = createNewFootballPlayer(metaRegion.metaNewRegions[newRegionIndex]->coordinates);
+
+                    assert(playersAssignedInThisFrame.count(playerInRegion) == 0);
+
+                    playersAssignedInThisFrame.insert(playerInRegion);
                     metaRegion.metaNewRegions[newRegionIndex]->playerInRegion = playerInRegion;
 
                     indicesUnassignedOld.erase(get<0>(scores[0]));
 
                     deleteFromOutOfSight(playerInRegion);
+                    FootballPlayer * toDelete =  searchForValue(occludedPlayers, playerInRegion);
 
-                } else {
+                    if(toDelete) occludedPlayers.erase(toDelete);
+
+                }
+                else { // Players are ambiguous
+                    if(playerInRegion->isAmbiguous) newRegion->playerInRegion = playerInRegion;
+                    else newRegion->playerInRegion = createAmbiguousPlayer(newRegion->coordinates);
+
                     if (analysisData) fprintf(analysisDataFile, "Two Regions match the same! \n");
 
                 }
@@ -751,7 +836,8 @@ void RegionTracker::assignRegions( MetaRegion & metaRegion) {
 
         if(maxVal - sndMaxVal > minDistanceThreshold && bestMatching != -1){
             FootballPlayer * fp = metaRegion.metaOldRegions[0]->playerInRegion;
-
+            FootballPlayer * keyOccluded = searchForValue(occludedPlayers, fp);
+            if(keyOccluded) occludedPlayers.erase(keyOccluded);
             deleteFromOutOfSight(fp);
             metaRegion.metaNewRegions[bestMatching]->playerInRegion = fp;
             indicesUnassignedOld.erase(0);
@@ -769,27 +855,24 @@ void RegionTracker::assignRegions( MetaRegion & metaRegion) {
         occludedPlayers.erase(ambiguousPlayer);
         deleteFromOutOfSight(ambiguousPlayer);
         indicesUnassignedOld.erase(index);
+
     }
 
 
     // Add the regions who are left to outofsight Regions
     Region * unassignedRegion;
-    bool behindPlayer;
     for(int index : indicesUnassignedOld){
         unassignedRegion = metaRegion.metaOldRegions[index];
-        behindPlayer = false;
+
         for(Region * regionWithPlayer : metaRegion.metaNewRegions){
             if(regionWithPlayer->playerInRegion &&
             Region::regionsInRelativeProximity(*regionWithPlayer, *unassignedRegion, 1)){
-
                 occludedPlayers.insert(make_pair(regionWithPlayer->playerInRegion, unassignedRegion->playerInRegion));
-                behindPlayer = true;
                 break;
             }
         }
 
-        if(! behindPlayer)
-            addToOutOfSight(unassignedRegion);
+        addToOutOfSight(unassignedRegion);
     }
 
     // Find Players who are maybe out of sight
@@ -801,7 +884,7 @@ void RegionTracker::assignRegions( MetaRegion & metaRegion) {
 
             FootballPlayer * matchingOutOfSight = nullptr;
 
-            vector<FootballPlayer *> nearbyPlayers;
+            unordered_set<FootballPlayer *> nearbyPlayers;
 
 
             for(Region * oofsr: outOfSightRegions){
@@ -812,21 +895,21 @@ void RegionTracker::assignRegions( MetaRegion & metaRegion) {
                                                       labShirtColorRegion[0], labShirtColorRegion[1], labShirtColorRegion[2]);
                 if(Region::regionsInRelativeProximity(* oofsr, *r, 2) // TODO: This caused a bug because it matched a region which was in another meta region!
                 && colorSimiliarity < 30)
-                    nearbyPlayers.push_back(oofsr->playerInRegion);
+                    nearbyPlayers.insert(oofsr->playerInRegion);
             }
 
             for(auto playerPair: occludedPlayers){
 
                 if(Region::regionsInRelativeProximity(Region(playerPair.first->coordinates.back()), *r, 2) &&
-                nearbyPlayers.size() == 0){
-                    nearbyPlayers.push_back(playerPair.second);
+                nearbyPlayers.empty()){
+                    nearbyPlayers.insert(playerPair.second);
                     occludedPlayers.erase(playerPair.first);
-                    break;
+                      break;
                 }
             }
 
             if(nearbyPlayers.size() == 1){
-                matchingOutOfSight = nearbyPlayers[0];
+                matchingOutOfSight = *nearbyPlayers.begin();
             }
 
             if(matchingOutOfSight){
@@ -841,7 +924,11 @@ void RegionTracker::assignRegions( MetaRegion & metaRegion) {
         }
     }
 
+
     for(Region * r: metaRegion.metaNewRegions) assert(r->playerInRegion);
+    for(Region * r1:outOfSightRegions){
+        for (Region const & r2 : regionsNewFrame) assert(r1->playerInRegion != r2.playerInRegion);
+    }
 
 
 
@@ -1097,7 +1184,7 @@ void RegionTracker::interpretMetaRegions(vector<MetaRegion> & mr) {
     //Draw the meta Regions
     for(MetaRegion const & metaRegion1: mr ){
 
-        rectangle(matCurrentFrame, metaRegion1.area, Scalar(255,0,0), 1 );
+        rectangle(matCurrentFrame, metaRegion1.area, Scalar(255,0,0), 1);
     }
 }
 
@@ -1226,6 +1313,14 @@ void RegionTracker::setupAnalysisOutFile(const char * filename){
 
 }
 
+FootballPlayer *RegionTracker::createAmbiguousPlayer(Rect const & coordinates) {
+    FootballPlayer * fp = new FootballPlayer(coordinates, currentFrame, string(to_string(-1)));
+    this->footballPlayers.push_back(fp);
+    fp->isAmbiguous = true;
+    return fp;
+
+}
+
 
 FootballPlayer::FootballPlayer(Rect coordinate, int frame, string const & identifier) {
 
@@ -1235,6 +1330,7 @@ FootballPlayer::FootballPlayer(Rect coordinate, int frame, string const & identi
     hist = Mat();
     x_vel = 0;
     y_vel = 0;
+    isAmbiguous = false;
 
 }
 
@@ -1534,6 +1630,8 @@ void Region::createColorProfile(Mat const &frame) {
 
 }
 
+
+
 void textAboveRect(Mat frame, Rect rect, string text) {
     int x,y;
     x = rect.x;
@@ -1657,3 +1755,4 @@ void helperBGRKMean(Mat const &frame, int clusterCount, Mat &labels, Mat &center
         }
 #endif
 }
+
