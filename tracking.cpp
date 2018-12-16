@@ -60,8 +60,10 @@ int RegionTracker::initialize(Mat frame) {
         objectCounter++;
 
     }
+
+    pBGSubtractor->apply(frame, foregroundMask);
     for(Region & r: regionsNewFrame){
-        r.createColorProfile(frame);
+        r.createColorProfile(frame, foregroundMask);
     }
 
     return objectCounter;
@@ -73,6 +75,9 @@ int RegionTracker::initialize(Mat frame) {
 bool RegionTracker::update(Mat frame) {
 
     matCurrentFrame = Mat(frame);
+
+    pBGSubtractor->apply(frame, foregroundMask);
+
     ++currentFrame;
     // Update Region Vectors, new regions from last frame are now old, get new Regions from detector
     regionLastFrame.swap(regionsNewFrame);
@@ -86,7 +91,7 @@ bool RegionTracker::update(Mat frame) {
         assert((rect).area() != 0);
     }
 
-    for(Region  & newRegion: regionsNewFrame) newRegion.createColorProfile(matCurrentFrame);
+    for(Region  & newRegion: regionsNewFrame) newRegion.createColorProfile(matCurrentFrame, foregroundMask);
 
     vector<MetaRegion> vectorMetaRegion = calcMetaRegions();
     interpretMetaRegions(vectorMetaRegion);
@@ -96,6 +101,10 @@ bool RegionTracker::update(Mat frame) {
 
     printInfo(vectorMetaRegion);
 
+    // Delete Regions who have not been found for too long.
+    for(Region * oofsR : outOfSightRegions ){
+        if(currentFrame - oofsR->playerInRegion->frames.back() > 10) deleteFromOutOfSight(oofsR->playerInRegion);
+    }
 
     return false;
 }
@@ -591,8 +600,79 @@ vector<MetaRegion> RegionTracker::calcMetaRegions() {
  * Things taken into Consideration: Size, (Predicted-)Position, Colorscheme.
  * The bigger the value, the more the likelihood of them representing the same area.
  */
-
 double RegionTracker::calcWeightedSimiliarity(const Region  * oldRegion, const Region *newRegion, Rect area){
+
+
+    bool overlap = (oldRegion->coordinates & newRegion->coordinates).area() != 0;
+    double similaritySize = 0;
+    double similarityPosition = 0;
+    double similarityHistogramm = 0;
+    double similarityColor = 0;
+
+    if(overlap){
+        // Size
+        similaritySize = float(oldRegion->coordinates.area()) / float(newRegion->coordinates.area());
+        if(similaritySize > 1) similaritySize = 1 / similaritySize;
+
+        // If the Player was seen in the Last frame, take the old Position, else use the  predicted Position
+        // Position
+        // Compare the Position of the upper left corner, hypotenuseMetaRegion is the maximum possible distance
+        // and would result in a value of zero.
+        Rect positionOldRegion;
+        if(true/*oldRegion->playerInRegion->frames.back() == currentFrame - 1*/){
+            positionOldRegion = oldRegion->coordinates;
+        }
+        else{
+            positionOldRegion = oldRegion->playerInRegion->predictPosition(currentFrame);
+#ifdef UNDEF
+            cout << "Frame " << frameNum << endl;
+        printf("(%i, %i, %i, %i)", positionOldRegion.x, positionOldRegion.y, positionOldRegion.width, positionOldRegion.height );
+        cout << endl;
+#endif
+        }
+        double hypotenuseMetaRegion = sqrt(pow(area.width , 2) + pow(area.height, 2));
+        double lengthVector = sqrt(pow(positionOldRegion.x - newRegion->coordinates.x, 2) + pow(positionOldRegion.y - newRegion->coordinates.y, 2));
+        similarityPosition = (hypotenuseMetaRegion - lengthVector) / hypotenuseMetaRegion;
+
+        similarityPosition = (positionOldRegion & newRegion->coordinates).area() == 0 ? 0 : similarityPosition;
+
+        //Histogram
+        // http://answers.opencv.org/question/8154/question-about-histogram-comparison-return-value/
+        // Return Value of CV_COMP_CORRELL: -1 is worst, 1 is best. -> Map to  [0,1]
+        Mat hist1, hist2;
+        histFromRect(matCurrentFrame, oldRegion->coordinates, hist1);
+        histFromRect(matCurrentFrame, newRegion->coordinates, hist2);
+
+        similarityHistogramm = compareHist(hist1, hist2, CV_COMP_CORREL);
+        similarityHistogramm = (similarityHistogramm / 2) + 0.5; // Map [-1,1] to [0,1]
+        similarityHistogramm = 0;
+
+        // Color
+        // CIE94 Formula. If the difference has a value greater than 100, similarityColor turns negative.
+        // TODO: Think about the difference Value: Maybe make it turn negative with an even smaller Value like 20.
+        // 0x56215dc9c318
+
+
+        similarityColor = deltaECIE94(
+                oldRegion->labShirtColor[0], oldRegion->labShirtColor[1], oldRegion->labShirtColor[2],
+                newRegion->labShirtColor[0], newRegion->labShirtColor[1], newRegion->labShirtColor[2]
+        );
+
+        similarityColor = (100 - similarityColor) / 100;
+        similarityColor = 0;
+
+    }
+
+    if(analysisData) {
+        fprintf(analysisDataFile, "%.4f + %.4f + %.4f + %.4f = %.4f \n",
+                similaritySize, similarityPosition, similarityHistogramm, similarityColor,
+                similaritySize + similarityPosition + similarityHistogramm + similarityColor );
+    }
+    return similaritySize + similarityPosition + similarityHistogramm + similarityColor;
+}
+
+#ifdef UNDEF
+double RegionTracker::calcWeightedSimiliarity2(const Region  * oldRegion, const Region *newRegion, Rect area){
 
     double similarityColor;
 
@@ -644,7 +724,7 @@ double RegionTracker::calcWeightedSimiliarity(const Region  * oldRegion, const R
 
     return similaritySize + (similarityOverlap / framesDifference);
 }
-
+#endif
 
 /*
  * Uses matchOldAndNewRegions to get a matrix which represents how the Regions correspond to each other.
@@ -654,7 +734,7 @@ double RegionTracker::calcWeightedSimiliarity(const Region  * oldRegion, const R
 void RegionTracker::assignRegions( MetaRegion & metaRegion) {
 
     double assignmentThreshold = 1.0f;
-    double minDistanceThreshold = 0.3f;
+    double minDistanceThreshold = 0.0f;
 
     set<int> indicesUnassignedOld;
     set<FootballPlayer *> playersAssignedInThisFrame;
@@ -717,6 +797,7 @@ void RegionTracker::assignRegions( MetaRegion & metaRegion) {
         for (vector<tuple<int, double>> &scores : matchingScores) {
 
             double scoreThisRegion = get<1>(scores[0]);
+            int indexOldRegion = get<0>(scores[0]);
             ambiguous = false;
             otherMatchesBetter = false;
 
@@ -726,10 +807,10 @@ void RegionTracker::assignRegions( MetaRegion & metaRegion) {
             if (scoreThisRegion > assignmentThreshold &&
                 scoreThisRegion - get<1>(scores[1]) <= minDistanceThreshold){
 
-                ambiguousRegions.insert(get<0>(scores[0]));
+                ambiguousRegions.insert(indexOldRegion);
                 ambiguousRegions.insert(get<0>(scores[1]));
 
-                indicesUnassignedOld.erase(get<0>(scores[0]));
+                indicesUnassignedOld.erase(indexOldRegion);
                 indicesUnassignedOld.erase(get<0>(scores[1]));
 
                 newRegion->playerInRegion = createAmbiguousPlayer(newRegion->coordinates);
@@ -738,6 +819,8 @@ void RegionTracker::assignRegions( MetaRegion & metaRegion) {
             else if(ambiguousRegions.count(get<0>(scores[0]) == 1)){
 
                 newRegion->playerInRegion = createAmbiguousPlayer(newRegion->coordinates);
+                ambiguousRegions.insert(indexOldRegion);
+                indicesUnassignedOld.erase(get<0>(scores[0]));
 
             }
             else if (scoreThisRegion > assignmentThreshold) {
@@ -1283,6 +1366,7 @@ RegionTracker::RegionTracker(const char *aoiFilePath, const char * videoPath) {
 
     analysisData = false;
     analysisDataFile = nullptr;
+    pBGSubtractor = createBackgroundSubtractorMOG2(); //MOG2 approach
 }
 
 RegionTracker::RegionTracker() {
@@ -1293,6 +1377,8 @@ RegionTracker::RegionTracker() {
     saveVideoPath = new char[64];
     analysisData = false;
     analysisDataFile = nullptr;
+    pBGSubtractor = createBackgroundSubtractorMOG2(); //MOG2 approach
+
 }
 
 void RegionTracker::enableVideoSave(const char *videoFilePath) {
@@ -1493,7 +1579,8 @@ Mat Region::getLabColors(Mat const &frame, int colorCount) {
         int clusterCount = colorCount;
         Mat labels, centers;
 
-    helperBGRKMean(regionImgCopy, colorCount, labels, centers);
+        Mat kMeanImage;
+        helperBGRKMean(regionImgCopy, colorCount, labels, centers);
 
         int  clusterColorCount[clusterCount];
         for(int i = 0; i < clusterCount; ++i) *(clusterColorCount + i) = 0;
@@ -1553,21 +1640,33 @@ Mat Region::getLabColors(Mat const &frame, int colorCount) {
 
 /*
  * Try to determine the color of the shirt.
- * Perform k-Mean on the region, and check in which "Bucket" the pixels who are in the middle of the region are mostly in.
- *  ->  Iterate rows and columns, add the appearances of the pixels and multiply by a factor which is determined by the position in the region.
- *      Then, normalize the result.
+ * Perform the k-mean algorithm and check which colors correspond to the pixels in the foreground the most
  */
-Mat Region::getShirtColor(Mat const &frameFull) {
+Mat Region::getShirtColor(Mat const &frameFull, Mat const & foregroundMask) {
     Mat regionImgReference, regionImgCopy;
 
+    Mat foregroundReference = foregroundMask(coordinates);
     regionImgReference = frameFull(coordinates);
+
     regionImgReference.copyTo(regionImgCopy);
     Mat frame = regionImgReference;
 
     const int colorCount  = 2;
     Mat labels, centers;
-    helperBGRKMean(frame, colorCount, labels, centers);
-    double weight[colorCount];
+    Mat returnKmean = helperBGRKMean(frame, colorCount, labels, centers);
+
+    Mat grayCenters(Size(1, colorCount), CV_8UC3);
+    for(int cluster_idx = 0; cluster_idx < colorCount; ++cluster_idx) {
+        grayCenters.at<Vec3b>(0, cluster_idx)[0] = centers.at<float>(cluster_idx, 0);
+        grayCenters.at<Vec3b>(0, cluster_idx)[1] = centers.at<float>(cluster_idx, 1);
+        grayCenters.at<Vec3b>(0, cluster_idx)[2] = centers.at<float>(cluster_idx, 2);
+    }
+    cvtColor(grayCenters, grayCenters, COLOR_BGR2GRAY);
+
+    cout << "Rows "<< grayCenters.rows << " continous " << grayCenters.isContinuous() << endl;
+
+
+    long weight[colorCount];
     int numColorAppearances[colorCount];
 
     // Prepare Arrays
@@ -1577,26 +1676,92 @@ Mat Region::getShirtColor(Mat const &frameFull) {
     }
 
 
-
     double yFactor, xFactor; // Range [1,2]
     int clusterId;
     float frameRows = frame.rows;
     float frameCols = frame.cols;
+
     for(int y = 0; y < frame.rows; ++y){
-        yFactor = 2 - (abs(float(y) - ( frameRows /2.0f)) / (frameRows/2));
         for(int x = 0; x < frame.cols; ++x){
-            xFactor = 2 - (abs(y - (frameCols /2.0f)) / (frameCols/2.0f));
              clusterId = labels.at<int>(y + x * frame.rows, 0);
-             weight[clusterId] += (xFactor + yFactor);
+             if(foregroundReference.at<char>(x,y) != 0) weight[clusterId]++;
              ++numColorAppearances[clusterId];
         }
     }
 
-    for(int index = 0; index < colorCount; ++index){
-        weight[index] = weight[index] / numColorAppearances[index];
+
+    imshow("kmean", returnKmean);
+    cvMoveWindow("kmean", 100, 100);
+
+    Mat image = Mat(returnKmean);
+    //Prepare the image for findContours
+    cv::cvtColor(image, image, CV_BGR2GRAY);
+
+    // Adapt the threshold so the contours will always be found
+
+    uchar * rowPtr = grayCenters.ptr<uchar>(0);
+    uchar val1 = rowPtr[0];
+    uchar val2;
+    if(! grayCenters.isContinuous()){
+        rowPtr = grayCenters.ptr<uchar>(1);
+        val2 = rowPtr[0];
+    }
+    else{
+        val2 = rowPtr[1];
+    }
+    int threshold = (val1 + val2) / 2;
+
+    cv::threshold(image, image, threshold, 255, CV_THRESH_BINARY);
+    cout << image << endl;
+
+    //Find the contours. Use the contourOutput Mat so the original image doesn't get overwritten
+    std::vector<std::vector<cv::Point> > contours;
+    cv::Mat contourOutput = image.clone();
+    cv::findContours( contourOutput, contours, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_NONE );
+
+    bool invert = false;
+    for(vector<Point> const &  contour : contours){
+        RotatedRect minRect = minAreaRect(contour);
+        int height = minRect.size.height;
+        int width = minRect.size.width;
+
+        if ( width * height > (0.9 * frame.rows * frame.cols)){
+            invert = true;
+        }
     }
 
-    double * elementPtr = max_element(weight, weight + colorCount );
+    //Draw the contours
+    cv::Mat contourImage(image.size(), CV_8UC3, cv::Scalar(0,0,0));
+    cv::Scalar colors[3];
+    colors[0] = cv::Scalar(255, 0, 0);
+    colors[1] = cv::Scalar(0, 255, 0);
+    colors[2] = cv::Scalar(0, 0, 255);
+    for (size_t idx = 0; idx < contours.size(); idx++) {
+        cv::drawContours(contourImage, contours, idx, Scalar(255,255,255), CV_FILLED );
+    }
+
+    if(invert){
+
+        contourImage = 255 - contourImage;
+    }
+
+    Mat masked;
+    regionImgReference.copyTo(masked, contourImage);
+    imshow("Masked", masked);
+    cvMoveWindow("Masked", 100, 200);
+    cv::imshow("Converted KMean", image);
+    cvMoveWindow("Converted KMean", 0, 0);
+    cv::imshow("Contours", contourImage);
+    cvMoveWindow("Contours", 200, 0);
+
+    namedWindow("Player");
+    imshow("Player", regionImgReference);
+    cvMoveWindow("Player", 200, 200);
+
+
+    waitKey(0);
+
+    long * elementPtr = max_element(weight, weight + colorCount );
     int colorIndex = elementPtr - weight;
 
 
@@ -1608,14 +1773,15 @@ Mat Region::getShirtColor(Mat const &frameFull) {
     cvPtr[2] = centers.at<float>(colorIndex, 2);
 
 
+
     return colorValues;
 }
 
 /*
  * Fills the Paramters bgrShirtColor and labShirtColor.
  */
-void Region::createColorProfile(Mat const &frame) {
-    Mat bgrShirtColorTemp = getShirtColor(frame);
+void Region::createColorProfile(Mat const &frame, Mat const & foregroundMask) {
+    Mat bgrShirtColorTemp = getShirtColor(frame, foregroundMask);
     Mat labShirtColorTemp;
     cvtColor(bgrShirtColorTemp, labShirtColorTemp, CV_BGR2Lab);
 
@@ -1713,7 +1879,7 @@ double deltaECIE94(unsigned char L1, char a1, char b1, unsigned char L2, char a2
 
 }
 
-void helperBGRKMean(Mat const &frame, int clusterCount, Mat &labels, Mat &centers) {
+Mat  helperBGRKMean(Mat const &frame, int clusterCount, Mat &labels, Mat &centers) {
 
     Mat samples(frame.rows * frame.cols, 3, CV_32F);
     for( int y = 0; y < frame.rows; y++ ){
@@ -1724,14 +1890,12 @@ void helperBGRKMean(Mat const &frame, int clusterCount, Mat &labels, Mat &center
         }
     }
 
-    int attempts = 5;
+    int attempts = 10;
 
     kmeans(samples, clusterCount, labels, TermCriteria(CV_TERMCRIT_ITER|CV_TERMCRIT_EPS, 10000, 0.0001), attempts, KMEANS_PP_CENTERS, centers );
     //    #define P2C_SHOW_KMEAN_WINDOW
-
-#ifdef P2C_SHOW_KMEAN_WINDOW
-    namedWindow("KMEAN");
-        Mat new_image( frame.size(), frame.type() );
+// #define P2C_SHOW_KMEAN_WINDOW
+        Mat new_image(frame.size(), frame.type());
 
         // cout << labColorCluster << endl;
         for( int y = 0; y < frame.rows; y++ ) {
@@ -1747,12 +1911,8 @@ void helperBGRKMean(Mat const &frame, int clusterCount, Mat &labels, Mat &center
 
         }
         //  putText(new_image,  playerInRegion->identifier, Point(0,coordinates.height), FONT_HERSHEY_PLAIN, 1, Scalar(0,0,255), 2);
-        imshow("KMEAN", new_image);
+        //
+    return  new_image;
 
-        while(true){
-            char c = waitKey(30);
-            if (c == 32) break;
-        }
-#endif
 }
 

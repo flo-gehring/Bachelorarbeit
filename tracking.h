@@ -14,6 +14,8 @@
 #include <opencv2/videoio.hpp>
 #include <opencv2/highgui.hpp>
 #include <opencv2/dnn.hpp>
+#include <opencv2/video/background_segm.hpp>
+
 
 #include <iostream>
 #include <cstring>
@@ -104,15 +106,18 @@ protected:
 
     unordered_map<FootballPlayer *, FootballPlayer *> occludedPlayers;
 
-
-
-
     int objectCounter = 0;
     int currentFrame = 0;
 
 
     bool saveVideo;
     char * saveVideoPath;
+
+    /*
+     *  Color Recognition
+     */
+    Ptr<BackgroundSubtractor> pBGSubtractor;
+    Mat foregroundMask;
 
 
 
@@ -130,7 +135,7 @@ double deltaECIE94(unsigned char L1, char  a1, char b1, unsigned char L2, char a
  * labes and centers are as described in the opencv documentation.
  * Labels has one Row and frame.cols * frame.rows columns, representing the frames pixel like this : frame[row, col] = labels[row * frame.cols + col]
  */
-void helperBGRKMean(Mat const &frame, int clusterCount, Mat &labels, Mat &centers);
+Mat helperBGRKMean(Mat const &frame, int clusterCount, Mat &labels, Mat &centers);
 
 // void optimizeWeightSelection(int rows, int cols, double * weightMatrix, int * selected)
 #endif //PANORAMA2CUBEMAP_TRACKING_H
