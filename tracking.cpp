@@ -1661,6 +1661,7 @@ Mat Region::getShirtColor(Mat const &frameFull, Mat const & foregroundMask) {
         grayCenters.at<Vec3b>(0, cluster_idx)[1] = centers.at<float>(cluster_idx, 1);
         grayCenters.at<Vec3b>(0, cluster_idx)[2] = centers.at<float>(cluster_idx, 2);
     }
+
     cvtColor(grayCenters, grayCenters, COLOR_BGR2GRAY);
 
     cout << "Rows "<< grayCenters.rows << " continous " << grayCenters.isContinuous() << endl;
@@ -1710,14 +1711,18 @@ Mat Region::getShirtColor(Mat const &frameFull, Mat const & foregroundMask) {
         val2 = rowPtr[1];
     }
     int threshold = (val1 + val2) / 2;
-
     cv::threshold(image, image, threshold, 255, CV_THRESH_BINARY);
-    cout << image << endl;
 
     //Find the contours. Use the contourOutput Mat so the original image doesn't get overwritten
     std::vector<std::vector<cv::Point> > contours;
+
     cv::Mat contourOutput = image.clone();
-    cv::findContours( contourOutput, contours, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_NONE );
+    cv::findContours(contourOutput, contours, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_NONE );
+
+    std::vector<std::vector<cv::Point>> contoursInverted;
+    cv::threshold(image, image, 100, 255, CV_THRESH_BINARY_INV);
+    cv::findContours(image, contoursInverted, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_NONE);
+
 
     bool invert = false;
     for(vector<Point> const &  contour : contours){
@@ -1732,6 +1737,14 @@ Mat Region::getShirtColor(Mat const &frameFull, Mat const & foregroundMask) {
 
     //Draw the contours
     cv::Mat contourImage(image.size(), CV_8UC3, cv::Scalar(0,0,0));
+
+    Mat contoursImageInverted(image.size(), CV_8UC3, Scalar(0,0,0));
+    for(int i = 0; i < contoursInverted.size(); ++i) drawContours(contoursImageInverted, contoursInverted, i, Scalar(255,255,255), CV_FILLED);
+    Mat maskInverted;
+    regionImgCopy.copyTo(maskInverted, contoursImageInverted);
+
+
+
     cv::Scalar colors[3];
     colors[0] = cv::Scalar(255, 0, 0);
     colors[1] = cv::Scalar(0, 255, 0);
@@ -1740,19 +1753,24 @@ Mat Region::getShirtColor(Mat const &frameFull, Mat const & foregroundMask) {
         cv::drawContours(contourImage, contours, idx, Scalar(255,255,255), CV_FILLED );
     }
 
-    if(invert){
-
-        contourImage = 255 - contourImage;
-    }
 
     Mat masked;
     regionImgReference.copyTo(masked, contourImage);
+
     imshow("Masked", masked);
     cvMoveWindow("Masked", 100, 200);
+    imshow("MaskedInv", maskInverted);
+    cvMoveWindow("MaskedInv", 150, 200);
+
     cv::imshow("Converted KMean", image);
     cvMoveWindow("Converted KMean", 0, 0);
     cv::imshow("Contours", contourImage);
     cvMoveWindow("Contours", 200, 0);
+
+    imshow("inverted", contoursImageInverted);
+    cvMoveWindow("inverted", 100, 100);
+
+
 
     namedWindow("Player");
     imshow("Player", regionImgReference);
