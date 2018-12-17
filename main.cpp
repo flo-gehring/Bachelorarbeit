@@ -2,9 +2,6 @@
 #include <string>   // for strings
 
 
-/* TODO Since Merging / Splitting does not work reliably, i should probably, when two regions are merging, just put all the
-    players into the outOfSightBox (and therefor let this be a FootballPlayer vector and not a Region vector.)
- */
 #include <opencv2/opencv.hpp>
 #include <opencv2/core.hpp>     // Basic OpenCV structures (cv::Mat, Scalar)
 #include <opencv2/videoio.hpp>
@@ -26,11 +23,11 @@ using namespace cv;
 using namespace dnn;
 using namespace std;
 
-
 void darknet_on_cubenet(char * video_path);
 void show_on_cubefaces(YOLODetector yoloD, char * video_path);
 void save_video_projection(YOLODetector yoloDetector, char* inPath, char* outPath);
 void darknet_predictions(char* video_path);
+
 
 int main(int argc, char *argv[]) {
     if (!(argc == 6 || argc == 7))
@@ -42,12 +39,7 @@ int main(int argc, char *argv[]) {
     }
     stringstream conv;
     char * video_path = argv[5];
-
-
     RegionTracker rt;
-    // rt.enableVideoSave("sorting.mp4");
-    // rt.trackVideo(video_path);
-
 
     string prefix = "/home/flo/Videos/";
 
@@ -67,9 +59,11 @@ int main(int argc, char *argv[]) {
 
     int i = 0;
     for(string const & s : videonames){
-       // rt.enableVideoSave(("hmm_" + s).c_str());
+        if(strcmp(argv[1], "save") == 0) {
+            rt.enableVideoSave(("newColor_and_thresh" + s).c_str());
+            rt.setupAnalysisOutFile(("newColor_andThresh_analysis_" + s + ".data").c_str());
+        }
        // rt.setAOIFile(("hmm_" + s + ".csv").c_str());
-        //rt.setupAnalysisOutFile(("hmm_analysis_" + s +   ".data").c_str());
 
         rt.darknetDetector.loadAOI("video_aoi_out.data");
         rt.trackVideo((prefix+s).c_str());

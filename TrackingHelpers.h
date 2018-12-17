@@ -85,7 +85,7 @@ public:
 
     static bool regionsIntersect(const Region & r1, const Region & r2);
     static bool regionsInRelativeProximity(Region const & r1, Region const &r2, int framesPassed);
-    void createColorProfile(Mat const & frame);
+    void createColorProfile(Mat const & frame, Mat const & foregroundMask);
 
     void updatePlayerInRegion(int frameNum);
 
@@ -98,7 +98,7 @@ public:
      * Returns a Mat of size 3 with color
      * of the T-Shirt / Shorts of the Football Player, saved as one Pixel in BGR Format.
      */
-    Mat getShirtColor(Mat const& frame);
+    Mat getShirtColor(Mat const& frame, Mat const & foregroundMask);
 
 };
 
