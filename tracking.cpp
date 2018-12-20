@@ -236,8 +236,9 @@ void RegionTracker::drawOnFrame(Mat frame, vector<MetaRegion> const & metaRegion
     for(MetaRegion const & mr : metaRegions){
         string players;
 
+        if(mr.metaNewRegions.size() > 1)
+            rectangle(frame, mr.area, Scalar(255, 0, 0), 2);
 
-        rectangle(frame, mr.area, Scalar(255, 0, 0), 2);
         for(Region * region : mr.metaOldRegions){
             players.append(region->playerInRegion->identifier);
             players.append(", ");
@@ -1646,16 +1647,30 @@ Mat Region::getLabColors(Mat const &frame, int colorCount) {
  * Perform the k-mean algorithm and check which colors correspond to the pixels in the foreground the most
  */
 Mat Region::getShirtColor(Mat const &frameFull, Mat const & foregroundMask) {
+
+    // Estimation:
+    // Crop the picture head and legs from picture
+    int croppedYSource = coordinates.height / 6;
+    int croppedLength = coordinates.height / 2;
+    Rect croppedRect = Rect(coordinates.x,
+            coordinates.y + croppedYSource,
+            coordinates.width,
+            croppedLength);
+
+
+
+
     Mat regionImgReference, regionImgCopy;
 
-    Mat foregroundReference = foregroundMask(coordinates);
-    regionImgReference = frameFull(coordinates);
+    Mat foregroundReference = foregroundMask(croppedRect);
+    regionImgReference = frameFull(croppedRect);
 
     regionImgReference.copyTo(regionImgCopy);
     Mat frame = regionImgReference;
 
     const int colorCount  = 2;
     Mat labels, centers;
+
     Mat returnKmean = helperBGRKMean(frame, colorCount, labels, centers);
 
     Mat grayCenters(Size(1, colorCount), CV_8UC3);
@@ -1692,7 +1707,7 @@ Mat Region::getShirtColor(Mat const &frameFull, Mat const & foregroundMask) {
 
     Mat image = Mat(returnKmean);
     //Prepare the image for findContours
-    cv::cvtColor(image, image, CV_BGR2GRAY);
+    cvtColor(image, image, CV_BGR2GRAY);
 
     // Adapt the threshold so the contours will always be found
 
@@ -1706,39 +1721,25 @@ Mat Region::getShirtColor(Mat const &frameFull, Mat const & foregroundMask) {
     else{
         val2 = rowPtr[1];
     }
-    int threshold = (val1 + val2) / 2;
-    cv::threshold(image, image, threshold, 255, CV_THRESH_BINARY);
 
-    //Find the contours. Use the contourOutput Mat so the original image doesn't get overwritten
-    std::vector<std::vector<cv::Point> > contours;
-
-    cv::Mat contourOutput = image.clone();
-    cv::findContours(contourOutput, contours, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_NONE );
-
-    std::vector<std::vector<cv::Point>> contoursInverted;
-    cv::threshold(image, image, 100, 255, CV_THRESH_BINARY_INV);
-    cv::findContours(image, contoursInverted, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_NONE);
-
-
-
-    //Draw the contours
     cv::Mat contourImage(image.size(), CV_8UC3, cv::Scalar(0,0,0));
 
     Mat contoursImageInverted(image.size(), CV_8UC3, Scalar(0,0,0));
-    for(int i = 0; i < contoursInverted.size(); ++i) drawContours(contoursImageInverted, contoursInverted, i, Scalar(255,255,255), CV_FILLED);
+
+    int threshold = (val1 + val2) / 2;
+
+    cv::threshold(image, contourImage, threshold, 255, CV_THRESH_BINARY);
+    cv::threshold(image, contoursImageInverted, threshold, 255, CV_THRESH_BINARY_INV);
+
+    // Mask the Picture
     Mat maskInverted;
     regionImgCopy.copyTo(maskInverted, contoursImageInverted);
 
-
-    for (size_t idx = 0; idx < contours.size(); idx++) {
-        cv::drawContours(contourImage, contours, idx, Scalar(255,255,255), CV_FILLED );
-    }
     Mat masked;
     regionImgReference.copyTo(masked, contourImage);
 
-
     /*
-     imshow("kmean", returnKmean);
+    imshow("kmean", returnKmean);
     cvMoveWindow("kmean", 100, 100);
     imshow("Masked", masked);
     cvMoveWindow("Masked", 100, 200);
@@ -1753,26 +1754,23 @@ Mat Region::getShirtColor(Mat const &frameFull, Mat const & foregroundMask) {
     imshow("inverted", contoursImageInverted);
     cvMoveWindow("inverted", 100, 100);
 
-
-
     namedWindow("Player");
     imshow("Player", regionImgReference);
     cvMoveWindow("Player", 200, 200);
 
-
-    waitKey(30);
+    waitKey(0);
      */
 
     vector<Point> nonZeroMask;
     vector<Point> invertedNonZeroMask;
 
 
-    cv::findNonZero(contourOutput, nonZeroMask);
+    cv::findNonZero(contourImage, nonZeroMask);
 
     Mat invertedImage;
     invertedImage = image.clone();
 
-    cv::findNonZero(invertedImage, invertedNonZeroMask);
+    cv::findNonZero(contoursImageInverted, invertedNonZeroMask);
 
     Mat nonZeroPixels(Size(1, nonZeroMask.size()), CV_8UC3);
 
@@ -1812,6 +1810,10 @@ Mat Region::getShirtColor(Mat const &frameFull, Mat const & foregroundMask) {
     ncIPtr[1] = newCentersInverted.at<float>(0, 1);
     ncIPtr[2] = newCentersInverted.at<float>(0, 2);
 
+    /*
+    cout << "New Centers:" << endl << newCenters << endl;
+    cout << "Inverted: " << endl << newCentersInverted << endl;
+     */
 
     // If newCentersInverted is close to red, the player has a red shirt.
     Mat labColorCenter(Size(1,1), CV_8UC3);
@@ -1832,8 +1834,11 @@ Mat Region::getShirtColor(Mat const &frameFull, Mat const & foregroundMask) {
     Mat colorValues(1,1,CV_8UC3);
     uchar * cvPtr = colorValues.ptr(0);
 
+
     double distanceToRed = deltaECIE94(cPtr[0], cPtr[1], cPtr[2],
-                                       exampleptr[0], exampleptr[1], exampleptr[2]);
+            exampleptr[0], exampleptr[1], exampleptr[2]);
+
+    /*
     if( distanceToRed < 20){
         cvPtr[0] = 0;
         cvPtr[1] = 0;
@@ -1847,6 +1852,7 @@ Mat Region::getShirtColor(Mat const &frameFull, Mat const & foregroundMask) {
         cvPtr[2] = 255;
         cout << "is white, rejected with:" << distanceToRed << endl;
     }
+     */
 
     /*
     cvPtr[0] = centers.at<float>(colorIndex, 0);
@@ -1969,7 +1975,7 @@ Mat  helperBGRKMean(Mat const &frame, int clusterCount, Mat &labels, Mat &center
         }
     }
 
-    int attempts = 10;
+    int attempts = 20;
 
     kmeans(samples, clusterCount, labels, TermCriteria(CV_TERMCRIT_ITER|CV_TERMCRIT_EPS, 10000, 0.0001), attempts, KMEANS_PP_CENTERS, centers );
     //    #define P2C_SHOW_KMEAN_WINDOW
