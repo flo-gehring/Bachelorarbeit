@@ -8,6 +8,30 @@
 #include "PanoramaTracking.h"
 #include "detect.h"
 
+
+class SectionProjector : public Projector{
+public:
+    SectionProjector(Size const & inputSize, int projectionWidth = 512, int projectionHeight = 512);
+
+    int beginProjection() override;
+
+    int project(Mat const &input, Mat &output) override;
+
+    void project(Mat const &input, int projectionId, Mat &output) override;
+
+    Rect sourceCoordinates(Mat const &input, Rect const &coordinates, int projectionNumber) override;
+
+
+    cv::Size inputSize;
+
+    int numberProjections;
+    std::vector<Rect> projectedSections;
+    int projectionsInHeight;
+    int projectionsInWidth;
+
+
+};
+
 class CubeMapProjector : public Projector{
 public:
 
@@ -29,6 +53,17 @@ public:
     std::vector<Rect> detect(Mat const &input) override;
 private:
     MatDetector matDetector;
+
+};
+
+
+class AOIFileDetectorWrapper: public DetectorWrapper{
+public:
+    explicit AOIFileDetectorWrapper(const char * aoiFile);
+    std::vector<Rect> detect(Mat const & input) override;
+    DetectionFromFile detector;
+
+
 
 };
 
