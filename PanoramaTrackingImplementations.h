@@ -9,6 +9,25 @@
 #include "detect.h"
 
 
+
+class EquatorLine : public Projector{
+public:
+    EquatorLine(Size const & inputSize, int projectionWidth = 512, int projectionHeight = 512);
+    int beginProjection() override;
+
+    int project(Mat const &input, Mat &output) override;
+
+    void project(Mat const &input, int projectionId, Mat &output) override;
+
+    Rect sourceCoordinates(Mat const &input, Rect const &coordinates, int projectionNumber) override;
+
+    int numberProjections;
+    std::vector<Rect> projectedSections;
+    int projectionsInHeight;
+    int projectionsInWidth;
+
+};
+
 class SectionProjector : public Projector{
 public:
     SectionProjector(Size const & inputSize, int projectionWidth = 512, int projectionHeight = 512);

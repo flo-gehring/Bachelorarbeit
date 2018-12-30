@@ -1377,7 +1377,7 @@ RegionTracker::RegionTracker() {
 
     saveVideo = false;
     roiData = fopen("roidata.txt", "w");
-    debugData = fopen("debugdata.txt", "w");
+    // debugData = fopen("debugdata.txt", "w");
     saveVideoPath = new char[64];
     analysisData = false;
     analysisDataFile = nullptr;

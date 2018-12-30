@@ -125,3 +125,56 @@ Rect SectionProjector::sourceCoordinates(Mat const &input, Rect const &coordinat
             coordinates.width,
             coordinates.height);
 }
+
+int EquatorLine::beginProjection() {
+    currentProjectionId  = 0;
+    return numberProjections;
+}
+
+EquatorLine::EquatorLine(Size const &inputSize, int projectionWidth, int projectionHeight) {
+
+    projectionsInHeight = 1;
+
+    numberProjections = 0;
+
+    int currentTopLeftX = 0;
+
+    int sectionWidth;
+    int topY = (inputSize.height / 2) - (projectionHeight / 2);
+    while(currentTopLeftX < inputSize.width){
+
+        sectionWidth = (currentTopLeftX + projectionWidth) >= inputSize.width ? inputSize.width - currentTopLeftX : projectionWidth;
+
+
+        projectedSections.emplace_back(Rect(currentTopLeftX, topY, sectionWidth, projectionHeight));
+
+        currentTopLeftX += projectionWidth;
+        ++numberProjections;
+    }
+
+}
+
+int EquatorLine::project(Mat const &input, Mat &output) {
+
+    currentProjectionId = currentProjectionId % numberProjections;
+
+    output = input(projectedSections[currentProjectionId]);
+
+
+    ++currentProjectionId;
+    return currentProjectionId;
+}
+
+void EquatorLine::project(Mat const &input, int projectionId, Mat &output) {
+
+    output = input(projectedSections[projectionId]);
+
+}
+
+Rect EquatorLine::sourceCoordinates(Mat const &input, Rect const &coordinates, int projectionNumber) {
+    const Rect & projectionRect = projectedSections[projectionNumber];
+    return cv::Rect(projectionRect.x + coordinates.x,
+                    projectionRect.y + coordinates.y,
+                    coordinates.width,
+                    coordinates.height);
+}
