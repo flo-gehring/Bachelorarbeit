@@ -14,6 +14,7 @@
 #include "detect.h"
 #include "tracking.h"
 #include "opencv_tracking.h"
+#include "testMaskRCNN.h"
 
 #include "PanoramaTracking.h"
 #include "PanoramaTrackingImplementations.h"
@@ -49,11 +50,17 @@ int main(int argc, char *argv[]) {
            //"TS_10_5_t01.mp4"
     };
 
+
+
     VideoCapture vc("/home/flo/Videos/TS_10_5.mp4");
     Mat testFrame;
     vc >> testFrame;
-    SectionProjector sp(testFrame.size());
+    EquatorLine sp(testFrame.size(), 1500, 750);
     vc.release();
+
+    detectOnVideo("/home/flo/Videos/TS_10_5.mp4", & sp);
+
+
     // AOIFileDetectorWrapper yoloWrapper("data/AOI/neu_aoi_TS_10_5.data");
     YOLOWrapper yoloWrapper;
     CubeMapProjector cubeMapProjector;
