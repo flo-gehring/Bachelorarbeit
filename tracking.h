@@ -33,6 +33,9 @@
 
 #include "TrackingHelpers.h"
 
+#include "PanoramaTracking.h"
+#include "PanoramaTrackingImplementations.h"
+
 class RegionTracker{
 public:
 
@@ -73,13 +76,16 @@ public:
 
 protected:
 
+    EquatorLine * projector;
+    MaskRCNN * maskRCNN;
+
     vector<MetaRegion> calcMetaRegions();
     void interpretMetaRegions(vector<MetaRegion> & mr);
     void assignRegions(MetaRegion  & metaRegion);
     FootballPlayer * createNewFootballPlayer(Rect const &);
     FootballPlayer * createAmbiguousPlayer(Rect const &);
 
-    vector<Rect> detectOnFrame(Mat  & frame);
+    vector<tuple<Rect, Mat>> detectOnFrame(Mat  & frame);
 
 
     /*

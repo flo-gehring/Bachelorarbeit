@@ -9,9 +9,14 @@
 #include "detect.h"
 
 
+#include <opencv2/dnn.hpp>
+#include <opencv2/imgproc.hpp>
+#include <opencv2/highgui.hpp>
 
 class EquatorLine : public Projector{
 public:
+    EquatorLine() = default;
+    void setUp(Size const & inputSize, int projectionWidth = 512, int projectionHeight = 512);
     EquatorLine(Size const & inputSize, int projectionWidth = 512, int projectionHeight = 512);
     int beginProjection() override;
 
@@ -84,6 +89,17 @@ public:
 
 
 
+};
+
+class MaskRCNN : public DetectorWrapper{
+public:
+    explicit MaskRCNN();
+    std::vector<Rect> detect(Mat const & input) override;
+
+    dnn::Net net; // The neural network doing all the work.
+    std::vector<std::tuple<Rect, Mat>> boundingBoxAndMask;
+
+    std::vector<std::tuple<Rect, Mat>> detectWithMask(Mat const & input);
 };
 
 #endif //PANORAMA2CUBEMAP_PANORAMATRACKINGIMPLEMENTATIONS_H

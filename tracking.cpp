@@ -40,7 +40,7 @@ int RegionTracker::initialize(Mat frame) {
 
 
     // All the detected Objects will be stored as rectangles in detectedRects
-    vector<Rect> detectedRects = detectOnFrame(frame);
+    vector<tuple<Rect, Mat>> detectedRects = detectOnFrame(frame);
 
     objectCounter = 0;
 
@@ -48,15 +48,21 @@ int RegionTracker::initialize(Mat frame) {
 
     for(auto it = detectedRects.begin(); it != detectedRects.end(); ++it){
 
-        CV_Assert(it->area() != 0);
+        Rect rect = get<0>(*it);
+        Mat mask = get<1>(*it);
 
-        newPlayer = new FootballPlayer((*it), 0, to_string(objectCounter));
+        CV_Assert(rect.area() != 0);
+
+        newPlayer = new FootballPlayer(rect, 0, to_string(objectCounter));
 
         footballPlayers.emplace_back(newPlayer);
-        regionsNewFrame.emplace_back(Region(*it,  footballPlayers.back()));
-        footballPlayers.back()->coordinates.push_back((*it));
+        regionsNewFrame.emplace_back(Region(rect,  footballPlayers.back()));
+        regionsNewFrame.back().objectMask = Mat(mask);
 
-        histFromRect(frame, (*it), newPlayer->hist);
+
+        footballPlayers.back()->coordinates.push_back(rect);
+
+        histFromRect(frame, rect, newPlayer->hist);
         objectCounter++;
 
     }
@@ -83,12 +89,13 @@ bool RegionTracker::update(Mat frame) {
     regionLastFrame.swap(regionsNewFrame);
     regionsNewFrame.clear();
 
-    vector<Rect> newRects = detectOnFrame(frame);
+    vector<tuple<Rect, Mat>> newRects = detectOnFrame(frame);
 
-    for(Rect const & rect: newRects){
+    for(tuple<Rect, Mat> const & regionAndMask: newRects){
 
-        regionsNewFrame.emplace_back(Region(rect));
-        assert((rect).area() != 0);
+        regionsNewFrame.emplace_back(Region(get<0>(regionAndMask)));
+        regionsNewFrame.back().objectMask = Mat(get<1>(regionAndMask));
+        assert((get<0>(regionAndMask)).area() != 0);
     }
 
     for(Region  & newRegion: regionsNewFrame) newRegion.createColorProfile(matCurrentFrame, foregroundMask);
@@ -116,7 +123,7 @@ bool RegionTracker::update(Mat frame) {
  * Detection on them.
  * The coordinates of the detected Bounding Boxes are projected back onto the original frame.
  */
-vector<Rect> RegionTracker::detectOnFrame(Mat  & frame) {
+vector<tuple<Rect, Mat>> RegionTracker::detectOnFrame(Mat  & frame) {
 
     const int numOfFaces = 4; // if 4 -> neither top or bottom face. 6 -> all faces.
 
@@ -133,16 +140,30 @@ vector<Rect> RegionTracker::detectOnFrame(Mat  & frame) {
 
     unsigned long countDetectedBoxes = 0;
 
-
-
     // We usually dont need top and bottom, this also increases performance massively,
     // because the bb of the cameraman was rather large, which slowed down the k-mean Algorithm.
-    for(int faceId = 0; faceId < numOfFaces; ++faceId){
-        createCubeMapFace(frame, face, faceId, sideLength, sideLength);
-        darknetDetector.detect_and_display(face);
+
+    vector<tuple<Rect, Mat>> foundPlayers, foundPlayersCurrentFace;
+
+    projector->setUp(frame.size(), frame.size().width , 750);
+    int numProjections = projector->beginProjection();
+    for(int faceId = 0; faceId < numProjections ; ++faceId){
+
+        projector->project(frame, face);
+        foundPlayersCurrentFace.clear();
+        foundPlayersCurrentFace = maskRCNN->detectWithMask(face);
+        cout << "num found players- " << foundPlayersCurrentFace.size() << endl;
+
+        for(tuple<Rect, Mat> const & foundPlayer : foundPlayersCurrentFace){
+
+            Rect projectedRegion = projector->sourceCoordinates(frame, get<0>(foundPlayer), faceId);
+            assert(projectedRegion.x + projectedRegion.width <= frame.cols && projectedRegion.y + projectedRegion.height <= frame.rows);
+
+            foundPlayers.emplace_back(make_pair(projectedRegion, Mat(get<1>(foundPlayer))));
 
 
-
+        }
+        /*
         for (auto detectedObjects = darknetDetector.found.begin();
             detectedObjects != darknetDetector.found.end(); ++detectedObjects) {
 
@@ -150,75 +171,11 @@ vector<Rect> RegionTracker::detectOnFrame(Mat  & frame) {
             scores[faceId].push_back((*detectedObjects).prob);
             ++countDetectedBoxes;
             }
+            */
 
 
     }
-
-    // Sort out bounding boxes on the edge of cube sides who probably denote the same person (or merge them)
-    // This only makes sense for the first 4 face sides.
-    // TODO: Actually we may be able to remove scores, which makes the loop simpler.
-    int rightFace;
-    int spaceThreshold  = 5; //
-    for(int leftFace = 0; leftFace < 4; ++leftFace){
-        rightFace = (leftFace + 1) % 4; //Wrap around if you reach the right most cube face.
-
-        for(Rect  & leftRect: tmpDetected[leftFace]){
-            if(leftRect.x + leftRect.width > sideLength - spaceThreshold){
-
-                for(int  iteratorOffset = 0 ; tmpDetected[rightFace].begin() + iteratorOffset !=  tmpDetected[rightFace].end(); ){
-
-                    Rect & rightRect = tmpDetected[rightFace][iteratorOffset];
-                    if(rightRect.x < spaceThreshold && // Check if the Bounding Boxes overlap on the vertical axis.
-                            ((leftRect.y - spaceThreshold <=  rightRect.y && leftRect.y + spaceThreshold >= rightRect.y)
-                            || (leftRect.y - spaceThreshold <= rightRect.y + rightRect.height && leftRect.y + spaceThreshold >= rightRect.y + rightRect.height))){ // Bounding Boxes probably denote the same player.
-
-                        if(rightFace != 0){
-                            leftRect.width += rightRect.width;
-                        }
-                        tmpDetected[rightFace].erase(tmpDetected[rightFace].begin() + iteratorOffset); //
-                        scores[rightFace].erase(scores[rightFace].begin() + iteratorOffset);
-                        --countDetectedBoxes;
-                    }
-                    else {
-                       ++iteratorOffset;
-                    }
-
-                }
-
-            }
-        }
-
-    }
-
-    // Flatten the detected Boxes and project them onto the whole frame
-    vector<Rect> flattenedDetected;
-    flattenedDetected.reserve(countDetectedBoxes);
-    vector<float> flattenedScores;
-    flattenedScores.reserve(countDetectedBoxes);
-
-    vector<Rect> & tmpFlattenRects = tmpDetected[0];
-    vector<float> & tmpFlattenScores = scores[0];
-
-    Rect currentFlattenRect;
-    float currentFlattenScore;
-    int flattenCounter = 0;
-    for(int faceSide = 0; faceSide < numOfFaces; ++ faceSide){
-
-        tmpFlattenRects = tmpDetected[faceSide];
-        tmpFlattenScores = scores[faceSide];
-
-        for(int i = 0; i < tmpDetected[faceSide].size(); ++i){
-
-            currentFlattenRect = tmpFlattenRects[i];
-            currentFlattenScore = tmpFlattenScores[i];
-
-            mapRectangleToPanorama(frame, faceSide, sideLength, sideLength, currentFlattenRect, panoramaCoords);
-
-            flattenedDetected.emplace_back(Rect(panoramaCoords));
-            flattenedScores.emplace_back(currentFlattenScore);
-        }
-    }
-    return flattenedDetected;
+    return foundPlayers;
 
 }
 
@@ -1370,7 +1327,12 @@ RegionTracker::RegionTracker(const char *aoiFilePath, const char * videoPath) {
 
     analysisData = false;
     analysisDataFile = nullptr;
+
+    projector = new EquatorLine();
+    maskRCNN = new MaskRCNN();
+
     pBGSubtractor = createBackgroundSubtractorMOG2(); //MOG2 approach
+
 }
 
 RegionTracker::RegionTracker() {
@@ -1381,6 +1343,10 @@ RegionTracker::RegionTracker() {
     saveVideoPath = new char[64];
     analysisData = false;
     analysisDataFile = nullptr;
+
+    projector = new EquatorLine();
+    maskRCNN = new MaskRCNN();
+
     pBGSubtractor = createBackgroundSubtractorMOG2(); //MOG2 approach
 
 }

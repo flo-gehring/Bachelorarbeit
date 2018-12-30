@@ -51,14 +51,18 @@ int main(int argc, char *argv[]) {
     };
 
 
+    RegionTracker regionTracker;
+
+    regionTracker.trackVideo(video_path);
+
 
     VideoCapture vc("/home/flo/Videos/TS_10_5.mp4");
     Mat testFrame;
     vc >> testFrame;
-    EquatorLine sp(testFrame.size(), 1500, 750);
+    EquatorLine sp(testFrame.size(), testFrame.size().width, testFrame.size().height);
     vc.release();
 
-    detectOnVideo("/home/flo/Videos/TS_10_5.mp4", & sp);
+    // detectOnVideo("/home/flo/Videos/TS_10_5.mp4", & sp);
 
 
     // AOIFileDetectorWrapper yoloWrapper("data/AOI/neu_aoi_TS_10_5.data");
