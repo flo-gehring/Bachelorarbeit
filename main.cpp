@@ -39,7 +39,7 @@ int main(int argc, char *argv[]) {
     }
     stringstream conv;
     char * video_path = argv[5];
-    RegionTracker rt;
+
 
     string prefix = "/home/flo/Videos/";
 
@@ -49,6 +49,19 @@ int main(int argc, char *argv[]) {
            //"TS_10_5_t01.mp4"
     };
 
+    VideoCapture vc("/home/flo/Videos/TS_10_5.mp4");
+    Mat testFrame;
+    vc >> testFrame;
+    SectionProjector sp(testFrame.size());
+    vc.release();
+    // AOIFileDetectorWrapper yoloWrapper("data/AOI/neu_aoi_TS_10_5.data");
+    YOLOWrapper yoloWrapper;
+    CubeMapProjector cubeMapProjector;
+
+    PanoramaTracking panoramaTracking(&yoloWrapper, "Boosting", &sp);
+
+    panoramaTracking.trackVideo("/home/flo/Videos/TS_10_5.mp4");
+
     string AOIFiles[] = {
             //"data/AOI/aoi_from_vid.data",
             "data/AOI/aoi_TS_10_5_lang.data",
@@ -57,6 +70,9 @@ int main(int argc, char *argv[]) {
     };
 
 
+    /*
+
+    RegionTracker rt;
     int i = 0;
     for(string const & s : videonames){
         if(strcmp(argv[1], "save") == 0) {
@@ -65,7 +81,7 @@ int main(int argc, char *argv[]) {
         }
        // rt.setAOIFile(("hmm_" + s + ".csv").c_str());
 
-        rt.darknetDetector.loadAOI("video_aoi_out.data");
+        rt.darknetDetector.loadAOI("data/AOI/neu_aoi_TS_10_5.data");
         rt.trackVideo((prefix+s).c_str());
         cout << s << " finished.." << endl;
 
@@ -89,6 +105,7 @@ int main(int argc, char *argv[]) {
     int numTrackers = sizeof(trackers) / sizeof(string);
     string tracker;
 
+     */
 /*
     for(int i = 0; i < numTrackers; ++i) {
         tracker = trackers[i];

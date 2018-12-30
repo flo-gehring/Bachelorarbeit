@@ -6,7 +6,10 @@
 #define PANORAMA2CUBEMAP_PANORAMATRACKING_H
 
 #include <vector>
+#include <tuple>
 #include <map>
+
+#include <time.h>
 
 #include <opencv2/opencv.hpp>
 #include <opencv2/core.hpp>     // Basic OpenCV structures (cv::Mat, Scalar)
@@ -19,6 +22,7 @@ using namespace cv;
 
 class Projector{
 public:
+
     /*
      * Call this Function before beginning to project a new Frame. It will return the number of total Projections
      * and prepare the class to work on a new Frame.
@@ -28,7 +32,7 @@ public:
     /*
      * Call this Functions to project the input Mat onto the output Mat.
      * To deal with the whole Frame, call it as often as beginProjection returns.
-     * The Mathod returns the current Projection Number.
+     * The Method returns the current Projection Number.
      */
     virtual int project(Mat const & input, Mat & output) = 0;
 
@@ -61,21 +65,31 @@ public:
 class PanoramaTracking {
 public:
 
+
     PanoramaTracking(DetectorWrapper * detector, const char * tracker, Projector * projector);
     DetectorWrapper * detector;
     const char * trackerType;
     Projector * projector;
-    void trackVideo(const char * fileName);
+    void trackVideo(const char * fileName, const char * videoFile = nullptr);
 
     void createNewTracker(Mat const & projection, Rect const & coordinates, int projectonId);
 
     bool update();
 
+    int detectionUpdateIntervall;
 protected:
+
+    int frameCounter;
+    time_t startTime;
+
+
+
     Mat  currentFrame;
     std::vector<Ptr<Tracker>> trackers;
     std::map<int, std::vector<Ptr<Tracker>>> projectionIdMapping;
-    std::vector<Rect> panoramaAOI;
+
+    std::map<Ptr<Tracker>, std::string> objectIdentifier;
+    std::vector<std::tuple<Rect, Ptr<Tracker>>> panoramaAOI;
 
 
 

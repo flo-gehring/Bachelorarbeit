@@ -10,22 +10,40 @@ PanoramaTracking::PanoramaTracking(DetectorWrapper *detector, const char * track
     this->trackerType = tracker;
     this->projector = projector;
     this->currentFrame = Mat();
+    this->detectionUpdateIntervall = 30;
+    this->frameCounter = 0;
+    this->startTime = time(0);
 }
 
-void PanoramaTracking::trackVideo(const char *fileName) {
+void PanoramaTracking::trackVideo(const char *fileName, const char * videoFile) {
 
-    int resolutionX = 1920;
-    int resolutionY = 1080;
-    Size resolution = Size(resolutionX, resolutionY);
+    Scalar textColor = Scalar(0,0,255); // Red
+    double textSize = 1.5;
+    int lineThickness = 1;
 
     VideoCapture videoCapture(fileName);
     Mat resizedFrame;
-
     if(! videoCapture.isOpened()){
         std::cerr << "Could not open Video: " << fileName << std::endl;
         exit(-1);
     }
     videoCapture >> currentFrame;
+
+    startTime = time(0);
+
+    VideoWriter videoWriter;
+    if(videoFile){
+        videoWriter = cv::VideoWriter(videoFile, VideoWriter::fourcc('M', 'J', 'P', 'G'),
+                videoCapture.get(CAP_PROP_FPS),
+               currentFrame.size(), true);
+    }
+    int resolutionX = 1920;
+    int resolutionY = 1080;
+    Size resolution = Size(resolutionX, resolutionY);
+
+
+
+
     if(currentFrame.empty()) {
         std::cerr << "Empty video: " << fileName << std::endl;
         exit(-1);
@@ -33,32 +51,56 @@ void PanoramaTracking::trackVideo(const char *fileName) {
 
 
     const char * windowName = "PanoramaTracker";
-    namedWindow(windowName);
-    resize(currentFrame, resizedFrame, resolution);
-    imshow(windowName, resizedFrame);
+
+    if(!videoFile) {
+        namedWindow(windowName);
+        resize(currentFrame, resizedFrame, resolution);
+        imshow(windowName, resizedFrame);
+    }
 
     while(! currentFrame.empty()){
         
         update();
 
-        for(Rect const & r:panoramaAOI) rectangle(currentFrame, r, Scalar(0,0,255), 2);
+        for(std::tuple<Rect, Ptr<Tracker>> const & r :panoramaAOI){
+            const Rect & rect = std::get<0>(r);
+            const Ptr<Tracker> & ptrTracker = std::get<1>(r);
 
-        resize(currentFrame, resizedFrame, resolution);
-        imshow(windowName, resizedFrame);
-        waitKey(30);
+            std::string name =  objectIdentifier.find(ptrTracker)->second;
+            rectangle(currentFrame, std::get<0>(r), Scalar(0,0,255), 2);
+            cv::putText(currentFrame, name, Point(rect.x, rect.y - 10), FONT_HERSHEY_SIMPLEX, textSize , textColor, lineThickness);
+        }
 
+        double fps = (time(0) - startTime) / double(frameCounter);
+
+        cv::putText(currentFrame, "FPS: " + std::to_string(fps), Point(10, 80), FONT_HERSHEY_SIMPLEX, 2, textColor, lineThickness);
+        cv::putText(currentFrame, trackerType, Point(10, 160), FONT_HERSHEY_SIMPLEX, 2,  textColor, lineThickness);
+
+        if(! videoFile) {
+            resize(currentFrame, resizedFrame, resolution);
+            imshow(windowName, resizedFrame);
+            waitKey(30);
+        }
+        else{
+            videoWriter << currentFrame;
+        }
         videoCapture >> currentFrame;
 
-        
     }
+
+    videoWriter.release();
 
 }
 
 bool PanoramaTracking::update() {
 
+
+    bool updateDetection = (frameCounter % detectionUpdateIntervall) == 0;
+
     panoramaAOI.clear();
 
     int numFrameProjections = projector->beginProjection();
+
     Mat projection;
     std::vector<Rect> detectedRects;
     std::vector<Ptr<Tracker>> trackerOnProjection;
@@ -70,16 +112,18 @@ bool PanoramaTracking::update() {
     for (int projectionId = 0; projectionId < numFrameProjections; ++projectionId) {
 
         projector->project(currentFrame, projection);
+        if(updateDetection)
+            detectedRects = detector->detect(projection);
 
-        detectedRects = detector->detect(projection);
         trackerOnProjection =  projectionIdMapping[projectionId];
 
         // Update Tracker
-        for(Ptr<Tracker> t: trackerOnProjection){
+        for(Ptr<Tracker> const & t: trackerOnProjection){
             objectFoundAgain = t->update(projection, newPosition);
+
             if(objectFoundAgain){
                 panoramaPostion = projector->sourceCoordinates(currentFrame, newPosition, projectionId);
-                panoramaAOI.emplace_back(Rect(panoramaPostion));
+                panoramaAOI.emplace_back(std::make_pair(Rect(panoramaPostion), t));
 
                 // Erase the already known detections from detected rects;
                 auto detected = detectedRects.begin();
@@ -103,14 +147,21 @@ bool PanoramaTracking::update() {
         }
 
         for(Rect const & newDetection : detectedRects){
+
             createNewTracker(projection, newDetection, projectionId);
+            Ptr<Tracker> newTracker = trackers.back();
+            std::string id = std::to_string(trackers.size());
+
             panoramaPostion = projector->sourceCoordinates(currentFrame, newPosition, projectionId);
-            panoramaAOI.emplace_back(Rect(panoramaPostion));
+
+            objectIdentifier[newTracker] = id;
+            panoramaAOI.emplace_back(std::make_pair(Rect(panoramaPostion), newTracker));
         }
 
 
 
     }
+    ++frameCounter;
     
     return false;
 }
