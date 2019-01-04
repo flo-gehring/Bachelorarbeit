@@ -52,7 +52,8 @@ int main(int argc, char *argv[]) {
 
 
     RegionTracker regionTracker;
-
+    regionTracker.enableVideoSave("maskRcnn_detector.avi");
+    regionTracker.setupAnalysisOutFile("maskRcnn.data");
     regionTracker.trackVideo(video_path);
 
 

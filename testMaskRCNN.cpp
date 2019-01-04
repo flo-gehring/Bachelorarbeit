@@ -14,8 +14,8 @@
         colors.clear();
 
         colors = {Scalar(0, 0, 255), Scalar(0, 255, 0), Scalar(255, 255, 255), Scalar(255, 102, 255)};
-        confThreshold = 0.5;
-        maskThreshold = 0.8;
+        confThreshold = 0.4;
+        maskThreshold = 0.7;
 
         char *windowName = "MaskRCNN";
         namedWindow(windowName);
@@ -107,9 +107,10 @@
         outDetections = outDetections.reshape(1, outDetections.total() / 7);
         for (int i = 0; i < numDetections; ++i) {
             float score = outDetections.at<float>(i, 2);
-            if (score > confThreshold) {
+            int classId = static_cast<int>(outDetections.at<float>(i, 1));
+
+            if (score > confThreshold && classId == 0) { // Only Detect Persons
                 // Extract the bounding box
-                int classId = static_cast<int>(outDetections.at<float>(i, 1));
                 int left = static_cast<int>(frame.cols * outDetections.at<float>(i, 3));
                 int top = static_cast<int>(frame.rows * outDetections.at<float>(i, 4));
                 int right = static_cast<int>(frame.cols * outDetections.at<float>(i, 5));
@@ -123,6 +124,9 @@
 
                 // Extract the mask for the object
                 Mat objectMask(outMasks.size[2], outMasks.size[3], CV_32F, outMasks.ptr<float>(i, classId));
+
+                std::cout << "Dims: " << objectMask.cols << " " << objectMask.rows << endl;
+                std::cout << (objectMask > 0.8) << std::endl;
 
                 // Draw bounding box, colorize and show the mask on the image
                 drawBox(frame, classId, score, box, objectMask);

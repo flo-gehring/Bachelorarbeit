@@ -77,6 +77,8 @@ public:
     Region(Rect coordinates);
     Region(Region const & r1);
 
+    Mat objectMask;
+
     Rect coordinates;
     FootballPlayer * playerInRegion;
     unsigned char bgrShirtColor[3];
@@ -93,6 +95,14 @@ public:
      * Side effect: sets colorInformation property.
      */
     Mat getLabColors(Mat const & frame, int colorCount);
+
+
+    /*
+     * Returns a Pixelmask which where the value of the pixel covering the object in the Region is > 0.
+     * If the objectMask attribute was set, it will simply be returned.
+     * If it was not set, the Object Mask will be estimated.
+     */
+    Mat getObjectMask(Mat const & frame, Mat const & foregroundMask);
 
     /*
      * Returns a Mat of size 3 with color

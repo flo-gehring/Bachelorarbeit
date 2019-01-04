@@ -145,19 +145,23 @@ vector<tuple<Rect, Mat>> RegionTracker::detectOnFrame(Mat  & frame) {
 
     vector<tuple<Rect, Mat>> foundPlayers, foundPlayersCurrentFace;
 
-    projector->setUp(frame.size(), frame.size().width , 750);
+    projector->setUp(frame.size(), frame.size().width , frame.size().height);
     int numProjections = projector->beginProjection();
     for(int faceId = 0; faceId < numProjections ; ++faceId){
 
         projector->project(frame, face);
+
+
         foundPlayersCurrentFace.clear();
         foundPlayersCurrentFace = maskRCNN->detectWithMask(face);
-        cout << "num found players- " << foundPlayersCurrentFace.size() << endl;
+
 
         for(tuple<Rect, Mat> const & foundPlayer : foundPlayersCurrentFace){
 
             Rect projectedRegion = projector->sourceCoordinates(frame, get<0>(foundPlayer), faceId);
             assert(projectedRegion.x + projectedRegion.width <= frame.cols && projectedRegion.y + projectedRegion.height <= frame.rows);
+
+            assert(get<1>(foundPlayer).dims <= CV_MAX_DIM && 0<= get<1>(foundPlayer).dims);
 
             foundPlayers.emplace_back(make_pair(projectedRegion, Mat(get<1>(foundPlayer))));
 
@@ -692,7 +696,7 @@ double RegionTracker::calcWeightedSimiliarity2(const Region  * oldRegion, const 
  * If two matching Regions are found the correct FootballPlayer will be assigned and the old Region deleted from
  * outOfSightRegions if its needed.
  */
-void RegionTracker::assignRegions( MetaRegion & metaRegion) {
+void RegionTracker::assignRegions(MetaRegion & metaRegion) {
 
     double assignmentThreshold = 2.5f;
     double minDistanceThreshold = 0.3f;
@@ -1491,11 +1495,13 @@ void Region::updatePlayerInRegion(int frameNum) {
 Region::Region(const Rect &coordinates, FootballPlayer *  ptrPlayer) {
     this->coordinates = coordinates;
     playerInRegion = ptrPlayer;
+    objectMask = Mat();
 }
 
 Region::Region(Rect coordinates) {
     this->coordinates = coordinates;
     playerInRegion = nullptr;
+    objectMask = Mat();
 }
 
 
@@ -1535,6 +1541,8 @@ Region::Region(Region const &r1) {
       labShirtColor[i] = r1.labShirtColor[i];
       bgrShirtColor[i] = r1.bgrShirtColor[i];
     }
+
+     r1.objectMask.copyTo(objectMask);
 
 }
 
@@ -1614,178 +1622,44 @@ Mat Region::getLabColors(Mat const &frame, int colorCount) {
  */
 Mat Region::getShirtColor(Mat const &frameFull, Mat const & foregroundMask) {
 
-    // Estimation:
-    // Crop the picture head and legs from picture
-    int croppedYSource = coordinates.height / 6;
-    int croppedLength = coordinates.height / 2;
-    Rect croppedRect = Rect(coordinates.x,
-            coordinates.y + croppedYSource,
-            coordinates.width,
-            croppedLength);
-
-
-
-
-    Mat regionImgReference, regionImgCopy;
-
-    Mat foregroundReference = foregroundMask(croppedRect);
-    regionImgReference = frameFull(croppedRect);
-
-    regionImgReference.copyTo(regionImgCopy);
-    Mat frame = regionImgReference;
-
-    const int colorCount  = 2;
-    Mat labels, centers;
-
-    Mat returnKmean = helperBGRKMean(frame, colorCount, labels, centers);
-
-    Mat grayCenters(Size(1, colorCount), CV_8UC3);
-    for(int cluster_idx = 0; cluster_idx < colorCount; ++cluster_idx) {
-        grayCenters.at<Vec3b>(0, cluster_idx)[0] = centers.at<float>(cluster_idx, 0);
-        grayCenters.at<Vec3b>(0, cluster_idx)[1] = centers.at<float>(cluster_idx, 1);
-        grayCenters.at<Vec3b>(0, cluster_idx)[2] = centers.at<float>(cluster_idx, 2);
-    }
-
-    cvtColor(grayCenters, grayCenters, COLOR_BGR2GRAY);
-
-    long weight[colorCount];
-    int numColorAppearances[colorCount];
-
-    // Prepare Arrays
-    for(int index = 0; index < colorCount; ++index){
-        weight[index] = 0;
-        numColorAppearances[index] = 0;
-    }
-
-    /*
-    double yFactor, xFactor; // Range [1,2]
-    int clusterId;
-    float frameRows = frame.rows;
-    float frameCols = frame.cols;
-    for(int y = 0; y < frame.rows; ++y){
-        for(int x = 0; x < frame.cols; ++x){
-             clusterId = labels.at<int>(y + x * frame.rows, 0);
-             if(foregroundReference.at<char>(x,y) != 0) weight[clusterId]++;
-             ++numColorAppearances[clusterId];
-        }
-    }
-     */
-
-    Mat image = Mat(returnKmean);
-    //Prepare the image for findContours
-    cvtColor(image, image, CV_BGR2GRAY);
-
-    // Adapt the threshold so the contours will always be found
-
-    uchar * rowPtr = grayCenters.ptr<uchar>(0);
-    uchar val1 = rowPtr[0];
-    uchar val2;
-    if(! grayCenters.isContinuous()){
-        rowPtr = grayCenters.ptr<uchar>(1);
-        val2 = rowPtr[0];
-    }
-    else{
-        val2 = rowPtr[1];
-    }
-
-    cv::Mat contourImage(image.size(), CV_8UC3, cv::Scalar(0,0,0));
-
-    Mat contoursImageInverted(image.size(), CV_8UC3, Scalar(0,0,0));
-
-    int threshold = (val1 + val2) / 2;
-
-    cv::threshold(image, contourImage, threshold, 255, CV_THRESH_BINARY);
-    cv::threshold(image, contoursImageInverted, threshold, 255, CV_THRESH_BINARY_INV);
-
-    // Mask the Picture
-    Mat maskInverted;
-    regionImgCopy.copyTo(maskInverted, contoursImageInverted);
-
-    Mat masked;
-    regionImgReference.copyTo(masked, contourImage);
-
-    /*
-    imshow("kmean", returnKmean);
-    cvMoveWindow("kmean", 100, 100);
-    imshow("Masked", masked);
-    cvMoveWindow("Masked", 100, 200);
-    imshow("MaskedInv", maskInverted);
-    cvMoveWindow("MaskedInv", 150, 200);
-
-    cv::imshow("Converted KMean", image);
-    cvMoveWindow("Converted KMean", 0, 0);
-    cv::imshow("Contours", contourImage);
-    cvMoveWindow("Contours", 200, 0);
-
-    imshow("inverted", contoursImageInverted);
-    cvMoveWindow("inverted", 100, 100);
-
-    namedWindow("Player");
-    imshow("Player", regionImgReference);
-    cvMoveWindow("Player", 200, 200);
-
-    waitKey(0);
-     */
-
+    const Mat region = frameFull(coordinates);
+    Mat mask = objectMask;
     vector<Point> nonZeroMask;
-    vector<Point> invertedNonZeroMask;
 
 
-    cv::findNonZero(contourImage, nonZeroMask);
-
-    Mat invertedImage;
-    invertedImage = image.clone();
-
-    cv::findNonZero(contoursImageInverted, invertedNonZeroMask);
+    cv::findNonZero(mask, nonZeroMask);
 
     Mat nonZeroPixels(Size(1, nonZeroMask.size()), CV_8UC3);
 
-    nonZeroPixels.zeros(Size(1, nonZeroMask.size()), CV_8UC3);
+    nonZeroPixels = Mat::zeros(Size(1, nonZeroMask.size()), CV_8UC3);
 
-    Mat invertedNonZeroPixels(Size(1, invertedNonZeroMask.size()), CV_8UC3);
 
     int column = 0;
-    for(Point const & point:nonZeroMask){
-        nonZeroPixels.at<Vec3b>(0, column) = regionImgCopy.at<Vec3b>(point);
-        ++column;
-    }
-
-    column = 0;
-    for(Point const & point: invertedNonZeroMask){
-        invertedNonZeroPixels.at<Vec3b>(0, column) = regionImgCopy.at<Vec3b>(point);
+    for(Point const & point: nonZeroMask){
+        nonZeroPixels.at<Vec3b>(0, column) = region.at<Vec3b>(point);
         ++column;
     }
 
 
-    Mat newCenters, newLabels, newCentersInverted;
-
-
-
+    Mat newCenters, newLabels;
     helperBGRKMean(nonZeroPixels, 1, newLabels, newCenters);
-    helperBGRKMean(invertedNonZeroPixels, 1, newLabels, newCentersInverted);
 
     Mat colorValuesNewCenter(Size(1,1), CV_8UC3);
-    Mat colorValuesNewCenterInverted(Size(1,1), CV_8UC3);
+
     uchar * ncPtr = colorValuesNewCenter.ptr(0);
     ncPtr[0] = newCenters.at<float>(0, 0);
     ncPtr[1] = newCenters.at<float>(0, 1);
     ncPtr[2] = newCenters.at<float>(0, 2);
-
-    uchar * ncIPtr = colorValuesNewCenterInverted.ptr(0);
-    ncIPtr[0] = newCentersInverted.at<float>(0, 0);
-    ncIPtr[1] = newCentersInverted.at<float>(0, 1);
-    ncIPtr[2] = newCentersInverted.at<float>(0, 2);
 
     /*
     cout << "New Centers:" << endl << newCenters << endl;
     cout << "Inverted: " << endl << newCentersInverted << endl;
      */
 
-    // If newCentersInverted is close to red, the player has a red shirt.
     Mat labColorCenter(Size(1,1), CV_8UC3);
-    cvtColor(colorValuesNewCenterInverted, labColorCenter, CV_BGR2Lab);
+    cvtColor(colorValuesNewCenter, labColorCenter, CV_BGR2Lab);
 
-    uchar * cPtr = labColorCenter.ptr<uchar>(0);
+    // uchar * cPtr = labColorCenter.ptr<uchar>(0);
 
 
     Mat examplebgr(Size(1,1), CV_8UC3);
@@ -1800,11 +1674,11 @@ Mat Region::getShirtColor(Mat const &frameFull, Mat const & foregroundMask) {
     Mat colorValues(1,1,CV_8UC3);
     uchar * cvPtr = colorValues.ptr(0);
 
-
+    /*
     double distanceToRed = deltaECIE94(cPtr[0], cPtr[1], cPtr[2],
             exampleptr[0], exampleptr[1], exampleptr[2]);
 
-    /*
+
     if( distanceToRed < 20){
         cvPtr[0] = 0;
         cvPtr[1] = 0;
@@ -1820,12 +1694,9 @@ Mat Region::getShirtColor(Mat const &frameFull, Mat const & foregroundMask) {
     }
      */
 
-    /*
-    cvPtr[0] = centers.at<float>(colorIndex, 0);
-    cvPtr[1] = centers.at<float>(colorIndex, 1);
-    cvPtr[2] = centers.at<float>(colorIndex, 2);
-     */
-
+    cvPtr[0] = ncPtr[0];    // centers.at<float>(colorIndex, 0);
+    cvPtr[1] = ncPtr[1];    // centers.at<float>(colorIndex, 1);
+    cvPtr[2] = ncPtr[2];    // centers.at<float>(colorIndex, 2);
 
     return colorValues;
 }
@@ -1847,6 +1718,15 @@ void Region::createColorProfile(Mat const &frame, Mat const & foregroundMask) {
     }
 }
 
+Mat Region::getObjectMask(Mat const &frame, Mat const &foregroundMask) {
+
+    if(! objectMask.empty())
+        return objectMask;
+
+
+
+    return Mat();
+}
 
 
 void textAboveRect(Mat frame, Rect rect, string text) {

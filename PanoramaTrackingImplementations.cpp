@@ -220,6 +220,11 @@ std::vector<std::tuple<Rect, Mat>> MaskRCNN::detectWithMask(Mat const &input) {
     const int numDetections = outDetections.size[2];
     const int numClasses = outMasks.size[1];
 
+
+    std::vector<Rect> bboxes;
+    std::vector<float> scores;
+    std::vector<int> indices;
+
     outDetections = outDetections.reshape(1, outDetections.total() / 7);
     for (int i = 0; i < numDetections; ++i) {
         float score = outDetections.at<float>(i, 2);
@@ -247,6 +252,9 @@ std::vector<std::tuple<Rect, Mat>> MaskRCNN::detectWithMask(Mat const &input) {
             resize(objectMask, objectMask, Size(box.width, box.height));
             Mat mask = (objectMask > maskThreshold);
 
+            bboxes.push_back(box);
+            scores.push_back(score);
+
 
             boundingBoxAndMask.emplace_back(std::make_pair(box, mask));
 
@@ -255,7 +263,16 @@ std::vector<std::tuple<Rect, Mat>> MaskRCNN::detectWithMask(Mat const &input) {
         }
     }
 
+    dnn::NMSBoxes(bboxes, scores, confThreshold, 0.1, indices);
 
+
+    std::vector<std::tuple<Rect, Mat>> passedNMS;
+
+    for(int i: indices){
+        passedNMS.emplace_back(boundingBoxAndMask[i]);
+    }
+
+    boundingBoxAndMask.swap(passedNMS);
     return boundingBoxAndMask;
 }
 
