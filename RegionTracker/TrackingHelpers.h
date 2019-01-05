@@ -9,7 +9,7 @@
 
 #include <string>
 #include <vector>
-#include "detect.h"
+#include "../Detectors/detect.h"
 
 #include <opencv2/core/utility.hpp>
 
@@ -29,7 +29,7 @@
 #include "array"
 
 
-#include "cubetransform.h"
+#include "../cubetransform.h"
 #include "tracking.h"
 
 using namespace std;
@@ -72,7 +72,7 @@ class Region{
 public:
     Region() = default;
     Region(const Rect &coordinates,  FootballPlayer * ptrPlayer);
-    Region(Rect coordinates);
+    explicit Region(Rect coordinates);
     Region(Region const & r1);
 
     Rect coordinates;

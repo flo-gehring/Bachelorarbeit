@@ -9,7 +9,7 @@ link_directories(/home/flo/Workspace/darknet)
 
 
 
-add_executable(Panorama2Cubemap main.cpp opencv_detect.cpp
-        cubetransform.cpp cubetransform.h detect.cpp detect.h tracking.cpp opencv_tracking.cpp opencv_tracking.h PanoramaTracking.cpp PanoramaTracking.h PanoramaTrackingImplementations.cpp PanoramaTrackingImplementations.h TrackingHelpers.h testMaskRCNN.cpp testMaskRCNN.h TrackingHelpers.cpp)
+add_executable(Panorama2Cubemap main.cpp Detectors/opencv_detect.cpp
+        cubetransform.cpp cubetransform.h Detectors/detect.cpp Detectors/detect.h RegionTracker/tracking.cpp OtherTracking/opencv_tracking.cpp OtherTracking/opencv_tracking.h OtherTracking/PanoramaTracking.cpp OtherTracking/PanoramaTracking.h OtherTracking/PanoramaTrackingImplementations.cpp OtherTracking/PanoramaTrackingImplementations.h RegionTracker/TrackingHelpers.h Detectors/testMaskRCNN.cpp Detectors/testMaskRCNN.h RegionTracker/TrackingHelpers.cpp)
 
 target_link_libraries(Panorama2Cubemap -lm -lpthread -ldarknet ${OpenCV_LIBS})

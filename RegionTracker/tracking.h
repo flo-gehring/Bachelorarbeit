@@ -7,7 +7,7 @@
 
 #include <string>
 #include <vector>
-#include "detect.h"
+#include "../Detectors/detect.h"
 
 #include <opencv2/core/utility.hpp>
 
@@ -32,6 +32,13 @@
 #include "array"
 
 #include "TrackingHelpers.h"
+
+
+class Region;
+class MetaRegion;
+class FootballPlayer;
+
+using namespace std;
 
 class RegionTracker{
 public:

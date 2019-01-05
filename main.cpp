@@ -10,14 +10,14 @@
 #include <opencv2/core/ocl.hpp>
 
 #include "cubetransform.h"
-#include "opencv_detect.h"
-#include "detect.h"
-#include "tracking.h"
-#include "opencv_tracking.h"
-#include "testMaskRCNN.h"
+#include "Detectors/opencv_detect.h"
+#include "Detectors/detect.h"
+#include "RegionTracker/tracking.h"
+#include "OtherTracking/opencv_tracking.h"
+#include "Detectors/testMaskRCNN.h"
 
-#include "PanoramaTracking.h"
-#include "PanoramaTrackingImplementations.h"
+#include "OtherTracking/PanoramaTracking.h"
+#include "OtherTracking/PanoramaTrackingImplementations.h"
 
 
 using namespace cv;
@@ -51,6 +51,7 @@ int main(int argc, char *argv[]) {
     };
 
 
+    /*
 
     VideoCapture vc("/home/flo/Videos/TS_10_5.mp4");
     Mat testFrame;
@@ -77,14 +78,14 @@ int main(int argc, char *argv[]) {
     };
 
 
-    /*
+    */
 
     RegionTracker rt;
     int i = 0;
     for(string const & s : videonames){
         if(strcmp(argv[1], "save") == 0) {
-            rt.enableVideoSave(("newColor_and_thresh" + s).c_str());
-            rt.setupAnalysisOutFile(("newColor_andThresh_analysis_" + s + ".data").c_str());
+            //rt.enableVideoSave(("newColor_and_thresh" + s).c_str());
+            //rt.setupAnalysisOutFile(("newColor_andThresh_analysis_" + s + ".data").c_str());
         }
        // rt.setAOIFile(("hmm_" + s + ".csv").c_str());
 
@@ -112,7 +113,7 @@ int main(int argc, char *argv[]) {
     int numTrackers = sizeof(trackers) / sizeof(string);
     string tracker;
 
-     */
+
 /*
     for(int i = 0; i < numTrackers; ++i) {
         tracker = trackers[i];

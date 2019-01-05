@@ -12,8 +12,8 @@
 #include <iostream>
 #include <vector>
 
-#include "PanoramaTracking.h"
-#include "PanoramaTrackingImplementations.h"
+#include "../OtherTracking/PanoramaTracking.h"
+#include "../OtherTracking/PanoramaTrackingImplementations.h"
 
 #include <opencv2/dnn.hpp>
 #include <opencv2/imgproc.hpp>
