@@ -7,11 +7,6 @@
 
 #include <set>
 
-
-// TODO: Velocity information for better prediction
-
-
-
 /*
  * Initializes the Tracker.
  * Performs the first round of detection which differs slightly from the following.
@@ -354,103 +349,17 @@ void RegionTracker::trackVideo(const char *filename) {
 
 }
 
-/********************************************
- *                                          *
- *      Football Player Class Methods       *
- *      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^       *
- ********************************************/
-
-FootballPlayer RegionTracker::playerById(string id) {
-    for(FootballPlayer * player: footballPlayers){
-        if (id == player->identifier){
-            return *player;
-        }
-    }
-    return FootballPlayer(Rect(), 0, "");
-}
-
-RegionTracker::~RegionTracker() {
-    for(FootballPlayer * footballPlayer : footballPlayers){
-        delete footballPlayer;
-    }
-    delete[] saveVideoPath;
-    for(Region *r : outOfSightRegions){
-        delete r;
-    }
-}
-
-
-bool helperOutOfSightInMeta(MetaRegion & mr, vector<Region *> & outOfSight, unordered_set<Region *> alreadyFound, int currentFrame){
-    bool areaUnchanged = true;
-    Rect commonArea;
-    bool regionInMeta;
-
-    auto search = [](MetaRegion & mr, Region * r){
-
-        for(Region * r_ptr: mr.metaOldRegions) if(r_ptr == r) return true;
-        for(Region * r_ptr: mr.metaNewRegions) if(r_ptr == r) return true;
-        return false;
-    };
-    for(Region * region : outOfSight){
-        commonArea = region->coordinates & mr.area;
-
-        regionInMeta = search(mr, region);
-
-        int framesDifference = currentFrame - region->playerInRegion->frames.back();
-
-        if(Region::regionsInRelativeProximity(*region, Region(mr.area), framesDifference) && ! regionInMeta &&
-       alreadyFound.count(region) == 0){ // TODO Num of frames passed is magic literal
-
-            areaUnchanged = false;
-            mr.area |= region->coordinates;
-            mr.metaOldRegions.push_back(region);
-            alreadyFound.insert(region);
-
-        }
-    }
-    return areaUnchanged;
-}
 
 /*
- * Helper Function:
- * Iterates Vector and puts matching Regions into the Meta Region.
- * Returns if the area has changed (For now this is iff a region was added).
+ *
+ *  Methods Responsible for the actual Tracking
+ *  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ *
+ *  calcMetaRegions: Returns a vector of spatially near Regions, from the current Frame, the last Frame and outOfSightRegions.
+ *  calcWeightedSimiliarity: Gives a Number of how well two Regions and their respecting Players match each other.
+ *  assignRegions: Calcs which Region in a MetaRegion is the successor of another Region. Also Marks Regions and Footballplayers as outOfSight and so on.
+ *  interpetMetaRegions: Not every MetaRegions needs to go through assignRegions.
  */
-bool helperRegionsInMeta(MetaRegion & mr, vector<Region> & vectorOfRegions, unordered_set<Region *> & regionFound, int currentFrame){
-
-    bool areaUnchanged = true;
-    Rect commonArea;
-    bool regionInMeta = false;
-
-    auto search = [](MetaRegion & mr, Region & r){
-
-        for(Region * r_ptr: mr.metaOldRegions) if(r_ptr == &r) return true;
-        for(Region * r_ptr: mr.metaNewRegions) if(r_ptr == &r) return true;
-        return false;
-    };
-
-
-    for(Region & region : vectorOfRegions){
-        commonArea = region.coordinates & mr.area;
-
-        regionInMeta = search(mr, region);
-        int framesDifference =   currentFrame - region.playerInRegion->frames.back();
-
-        //if(regionFound.count(&region) != 0) break; // Region was already handled in a different MetaRegion.
-
-
-        if(Region::regionsInRelativeProximity(region, Region(mr.area), 10) && ! regionInMeta ){
-
-            areaUnchanged = false;
-            mr.area |= region.coordinates;
-            mr.metaOldRegions.push_back(&region);
-            regionFound.insert(&region);
-
-        }
-    }
-    return areaUnchanged;
-}
-
 
 
 
@@ -852,7 +761,7 @@ void RegionTracker::assignRegions( MetaRegion & metaRegion) {
                         else{
                             ambiguous = true;
                             // If the selection is ambiguous, we never want to hear from the players again. Delete the Regions from out of sight.
-                            // TODO : make function wit above code
+                            // TODO : make function with above code
                             ambiguousRegions.insert(idBestMatchOther);
                             ambiguousRegions.insert(idBestMatchThis);
 
@@ -892,7 +801,6 @@ void RegionTracker::assignRegions( MetaRegion & metaRegion) {
 
                 }
             }
-
 
             ++newRegionIndex;
         }
@@ -1036,150 +944,6 @@ void RegionTracker::assignRegions( MetaRegion & metaRegion) {
 
 }
 
-/*
- * Get the selection of weights which has the highest possible Sum.
- * Constraint: There can be at most one "1" in every row and column.
- * Bruteforce solution, as the arrays are fairly small.
- */
-void optimizeWeightSelection(int rows, int cols, double const *  weightMatrix, int * selected){
-    short selectedCells[rows];
-    short temp_selectedCells[rows];
-
-    for(int i = 0; i < rows; ++i){
-        selectedCells[i] = -2;
-        temp_selectedCells[i] = -2;
-    }
-    bool finished = false;
-    double temp_Weight;
-    double maxWeight = 0;
-
-    int currentRow = 0;
-
-    while(!finished){
-
-        ++temp_selectedCells[currentRow];
-
-        if(temp_selectedCells[currentRow] == cols){ // Last Column of Row was checked
-            // Check if loop is finished
-            finished = true;
-            for(int i = 0; i < rows; ++i){
-                finished &= temp_selectedCells[i] >= cols-1;
-            }
-            if(! finished){
-                temp_selectedCells[currentRow] = -2;
-                --currentRow;
-            }
-            continue;
-        }
-        else if(currentRow != rows-1 ){ // Last Column, combination was checked in last iteration.
-            ++currentRow;
-            continue;
-        }
-        else{ // Last Row, increase counter and  check new selection
-
-            // Check if Selection is valid and Calc selected Weight
-            bool selectionValid = true;
-            temp_Weight = 0;
-            for(int i = 0; i < rows; ++i){
-                for(int r = i+1; r < rows; ++r){
-                    selectionValid &= ((temp_selectedCells[i] != temp_selectedCells[r]) || temp_selectedCells[i] == -1);
-                }
-
-                if(temp_selectedCells[i] > -1){
-                    temp_Weight += weightMatrix[(cols * i) + temp_selectedCells[i]];
-                }
-            }
-
-            // If new Maxmium was found,
-            if(selectionValid && temp_Weight > maxWeight){
-                maxWeight = temp_Weight;
-                for(int i = 0; i < rows; ++i)
-                    selectedCells[i] = temp_selectedCells[i];
-            }
-
-        }
-        // Check if loop is finished
-        finished = true;
-        for(int i = 0; i < rows; ++i){
-            finished &= temp_selectedCells[i] == cols-1;
-        }
-
-
-    }
-
-    for(int i = 0; i < rows; ++i){
-        if(selectedCells[i] != -1){
-            selected[(i * cols) + selectedCells[i]] = 1;
-        }
-    }
-}
-
-
-/*
- * Create a matrix M in which is saved which regions are the most similiar to each other.
- * If M[i,j] == 1, then metaOldRegions[i] corresponds to metaNewRegion[j]
- */
-int *  MetaRegion::matchOldAndNewRegions(Mat frame, int * matching, int frameNum, RegionTracker * rt){
-
-    unsigned long oldRegionSize = metaOldRegions.size();
-    unsigned long newRegionSize = metaNewRegions.size();
-
-    double matchingMatrix[oldRegionSize * newRegionSize];
-
-    Region * currentOldRegion;
-
-
-    if(rt->analysisData) {
-        fprintf(rt->analysisDataFile, "matchOldAndNewRegion \n");
-    }
-
-    // Calculate the weighted similarities for each of the Regions in the Meta Region
-    for(int rowCounter = 0; rowCounter < oldRegionSize; ++rowCounter){
-        currentOldRegion = metaOldRegions[rowCounter];
-
-        if(rt->analysisData) {
-            fprintf(rt->analysisDataFile, "Player %s: \n",  currentOldRegion->playerInRegion->identifier.c_str());
-        }
-
-        for(int colCounter = 0; colCounter < metaNewRegions.size(); ++colCounter){
-
-            matchingMatrix[(rowCounter * newRegionSize) + colCounter] =
-                    rt->calcWeightedSimiliarity(currentOldRegion, metaNewRegions[colCounter], area);
-        }
-    }
-
-    // Print Matrix for debugging purposes
-
-    if(rt->analysisData) {
-
-        for (int rowCounter = 0; rowCounter < oldRegionSize; ++rowCounter) {
-            currentOldRegion = metaOldRegions[rowCounter];
-            for (int colCounter = 0; colCounter < metaNewRegions.size(); ++colCounter) {
-
-                fprintf(rt->analysisDataFile, "%.4f ",  matchingMatrix[(rowCounter * newRegionSize) + colCounter]);
-            }
-            fprintf(rt->analysisDataFile, "\n");
-        }
-    }
-
-
-
-    // Create a matrix which shows how the Regions correspond to each other.
-    optimizeWeightSelection(metaOldRegions.size(), metaNewRegions.size(), matchingMatrix, matching);
-    if(rt->analysisData) {
-        fprintf(rt->analysisDataFile, "Selection: \n");
-        for (int rowCounter = 0; rowCounter < oldRegionSize; ++rowCounter) {
-            currentOldRegion = metaOldRegions[rowCounter];
-            fprintf( rt->analysisDataFile, "P %s: ", currentOldRegion->playerInRegion->identifier.c_str());
-            for (int colCounter = 0; colCounter < metaNewRegions.size(); ++colCounter) {
-
-                fprintf(rt->analysisDataFile, "%i ",  matching[(rowCounter * newRegionSize) + colCounter]);
-            }
-            fprintf(rt->analysisDataFile, "\n");
-        }
-    }
-    return matching;
-}
 
 /*
  * old Regions: regions from the last frame and out of sight regions.
@@ -1275,6 +1039,12 @@ void RegionTracker::interpretMetaRegions(vector<MetaRegion> & mr) {
     }
 }
 
+
+/*
+ *      Management of FootballPlayer and Regions.
+ *      -----------------------------------------
+ */
+
 /*
  * If the given FootballPlayer is in outOfSight Regions, the corresponding Region will be deleted.
  */
@@ -1310,51 +1080,19 @@ FootballPlayer *RegionTracker::createNewFootballPlayer(Rect const & coordinates)
 }
 
 
-bool playerInRegionVector(FootballPlayer * fp, vector<Region> const & vr){
+/*
+ *      Constructors / Destructors
+ *      --------------------------
+ */
 
-    for(Region const & r: vr) if (fp == r.playerInRegion) return true;
-
-    return false;
-
-
-}
-
-void RegionTracker::printInfo(vector<MetaRegion> const & metaRegions) {
-
-
-    FootballPlayer * fp;
-    Rect  * coordinates;
-    for(Region const & region:regionsNewFrame){
-        fp = region.playerInRegion;
-        coordinates = & fp->coordinates.back();
-        fprintf(roiData, "%i;%s;%i;%i;%i;%i\n", currentFrame, fp->identifier.c_str(), coordinates->x, coordinates->y, coordinates->width, coordinates->height);
+RegionTracker::~RegionTracker() {
+    for(FootballPlayer * footballPlayer : footballPlayers){
+        delete footballPlayer;
     }
-
-    for(MetaRegion const & metaRegion: metaRegions){
-        for(Region * regionInMeta : metaRegion.metaNewRegions){
-            fp = regionInMeta->playerInRegion;
-            if(! playerInRegionVector(fp, regionsNewFrame)){
-                fprintf(roiData, "%i;%s;%i;%i;%i;%i\n", currentFrame, fp->identifier.c_str(),
-                        regionInMeta->coordinates.x,
-                        regionInMeta->coordinates.y,
-                        regionInMeta->coordinates.width,
-                        regionInMeta->coordinates.height);
-
-            }
-        }
+    delete[] saveVideoPath;
+    for(Region *r : outOfSightRegions){
+        delete r;
     }
-}
-
-
-
-void RegionTracker::setAOIFile(const char *aoiFilePath) {
-
-    if(roiData != nullptr){
-        fclose(roiData);
-    }
-
-    roiData = fopen(aoiFilePath, "w");
-
 }
 
 RegionTracker::RegionTracker(const char *aoiFilePath, const char * videoPath) {
@@ -1385,11 +1123,27 @@ RegionTracker::RegionTracker() {
 
 }
 
+
+
+/*
+ *      Configuration for Video and Dataoutput
+ *      --------------------------------------
+ */
+
+void RegionTracker::setAOIFile(const char *aoiFilePath) {
+
+    if(roiData != nullptr){
+        fclose(roiData);
+    }
+
+    roiData = fopen(aoiFilePath, "w");
+
+}
+
 void RegionTracker::enableVideoSave(const char *videoFilePath) {
 
     saveVideo = true;
     strcpy(saveVideoPath, videoFilePath);
-
 
 }
 
@@ -1412,475 +1166,37 @@ FootballPlayer *RegionTracker::createAmbiguousPlayer(Rect const & coordinates) {
 }
 
 
-FootballPlayer::FootballPlayer(Rect coordinate, int frame, string const & identifier) {
+void RegionTracker::printInfo(vector<MetaRegion> const & metaRegions) {
 
-    coordinates.emplace_back(coordinate);
-    frames.emplace_back(frame);
-    this->identifier = string(identifier);
-    hist = Mat();
-    x_vel = 0;
-    y_vel = 0;
-    isAmbiguous = false;
-
-}
-
-void FootballPlayer::addPosition(Rect coordinates, int frame) {
-    if(frames.back() != frame) {
-        this->coordinates.emplace_back(Rect(coordinates));
-        this->frames.push_back(frame);
-    }
-}
-
-
-Rect FootballPlayer::predictPosition(int frameNum) {
-
-
-    if(coordinates.size() < 2)
-        return Rect(coordinates.back());
-
-    int deltaX[frames.size()];
-    int deltaY[frames.size()];
-
-    int iInc;
-    for(int i = 0; i < coordinates.size(); ++i){
-        iInc = i + 1;
-        deltaX[i] = coordinates[coordinates.size() -  iInc].x;
-        deltaY[i] = coordinates[coordinates.size() - iInc].y;
-    }
-    int numIterations = 0;
-    for(int i = 0; i < coordinates.size() - 1; ++i){
-        iInc = i + 1;
-
-        deltaX[i] = deltaX[iInc] - deltaX[i];
-        deltaY[i] = deltaY[iInc] - deltaY[i];
-        numIterations = iInc;
-        if(i > 0 &&  ((deltaX[i] * deltaX[i-1] < 0) || (deltaY[i] * deltaY[i-1] < 0))){ // Break if the Football Player changes directions
-            break;
-        }
-
+    FootballPlayer * fp;
+    Rect  * coordinates;
+    for(Region const & region:regionsNewFrame){
+        fp = region.playerInRegion;
+        coordinates = & fp->coordinates.back();
+        fprintf(roiData, "%i;%s;%i;%i;%i;%i\n", currentFrame, fp->identifier.c_str(), coordinates->x, coordinates->y, coordinates->width, coordinates->height);
     }
 
-    int framesPassed = frames.back() - frames[frames.size() - (numIterations + 1)];
+    for(MetaRegion const & metaRegion: metaRegions){
+        for(Region * regionInMeta : metaRegion.metaNewRegions){
+            fp = regionInMeta->playerInRegion;
+            if(! playerInRegionVector(fp, regionsNewFrame)){
+                fprintf(roiData, "%i;%s;%i;%i;%i;%i\n", currentFrame, fp->identifier.c_str(),
+                        regionInMeta->coordinates.x,
+                        regionInMeta->coordinates.y,
+                        regionInMeta->coordinates.width,
+                        regionInMeta->coordinates.height);
 
-    double avgXChange = double(coordinates.back().x - coordinates[coordinates.size() - (numIterations + 1)].x) / double(framesPassed);
-    double avgYChange = double(coordinates.back().y - coordinates[coordinates.size() - (numIterations + 1)].y) / double(framesPassed);
-
-
-    return cv::Rect(
-            int(coordinates.back().x + (avgXChange * ( frameNum - frames.back()))),
-            int(coordinates.back().y + (avgYChange * (frameNum - frames.back()))),
-            coordinates.back().width,
-            coordinates.back().height
-            );
-}
-/*
- * Calc new velocity, update coordinates and frame num.
- */
-void FootballPlayer::update(Rect const &coordinates, int frame) {
-
-    unsigned long numKnownFrames = frames.size();
-
-    addPosition(coordinates, frame);
-
-
-    auto coordinatesIterator = this->coordinates.begin();
-
-    Rect & lastPosition = * coordinatesIterator;
-
-    double deltaX, deltaY;
-    while(coordinatesIterator != this->coordinates.end()){
-        deltaX = lastPosition.x - coordinatesIterator->x;
-        deltaY = lastPosition.y - coordinatesIterator->y;
-
-        x_vel += deltaX;
-        y_vel += deltaY;
-
-        lastPosition = * coordinatesIterator;
-        ++coordinatesIterator;
-
-    }
-
-    x_vel = x_vel / numKnownFrames;
-    y_vel = y_vel / numKnownFrames;
-
-
-}
-
-/********************************************
- *                                          *
- *          Region Class Methods            *
- *          ^^^^^^^^^^^^^^^^^^^^            *
- ********************************************/
-
-/*
- * Adds the Position of the Region and the current Frame to the tracked objects in the Region.
- */
-void Region::updatePlayerInRegion(int frameNum) {
-
-    playerInRegion->update(coordinates, frameNum);
-
-}
-
-
-Region::Region(const Rect &coordinates, FootballPlayer *  ptrPlayer) {
-    this->coordinates = coordinates;
-    playerInRegion = ptrPlayer;
-}
-
-Region::Region(Rect coordinates) {
-    this->coordinates = coordinates;
-    playerInRegion = nullptr;
-}
-
-
-bool Region::regionsIntersect(const Region &r1, const Region &r2){
-    return ((r1.coordinates & r2.coordinates).area() > 0);
-
-}
-
-void estimatePosition(Region const & r1, int framesPassed, Rect & r){
-    int pixelPerFrame = 3;
-    Rect rect1 = Rect(r1.coordinates);
-    int x1, y1,width1 ,height1;
-    x1 = rect1.x - (framesPassed * pixelPerFrame);
-    y1 = rect1.y - (framesPassed * pixelPerFrame);
-    width1 = rect1.width + (2 * pixelPerFrame * framesPassed);
-    height1 = rect1.height + (2 * pixelPerFrame * framesPassed);
-
-    r.x = x1;
-    r.y = y1;
-    r.width = width1;
-    r.height = height1;
-}
-
-bool Region::regionsInRelativeProximity(Region const &r1, Region const &r2, int framesPassed) {
-
-    Rect estimate1, estimate2;
-    estimatePosition(r1, framesPassed, estimate1);
-    estimatePosition(r2, framesPassed, estimate2);
-
-    return (estimate1 & estimate2).area() > 0;
-}
-
-Region::Region(Region const &r1) {
-    coordinates = Rect(r1.coordinates);
-    playerInRegion = r1.playerInRegion;
-    for(unsigned char i = 0; i < 3; ++i){
-      labShirtColor[i] = r1.labShirtColor[i];
-      bgrShirtColor[i] = r1.bgrShirtColor[i];
-    }
-
-}
-
-
-Mat Region::getLabColors(Mat const &frame, int colorCount) {
-    Mat regionImgReference, regionImgCopy;
-
-        regionImgReference = frame(coordinates);
-        regionImgReference.copyTo(regionImgCopy);
-
-        // Copy all the Pixel values to the samples Mat
-        int clusterCount = colorCount;
-        Mat labels, centers;
-
-        Mat kMeanImage;
-        helperBGRKMean(regionImgCopy, colorCount, labels, centers);
-
-        int  clusterColorCount[clusterCount];
-        for(int i = 0; i < clusterCount; ++i) *(clusterColorCount + i) = 0;
-
-
-        for(int x = 0; x < labels.rows; ++x){
-            (* (clusterColorCount + labels.at<int>(x, 0)))++;
-        }
-
-        Mat rgbColorClusters(Size(clusterCount,1), CV_8UC3);
-        for(int i = 0; i < clusterCount; ++i) {
-            float blue = centers.at<float>(i, 0);
-            float green = centers.at<float>(i, 1);
-            float red = centers.at<float>(i, 2);
-            /*
-            printf("Cluster %i: %i with (B,G,R) %f, %f, %f \n",
-                   i, *(clusterColorCount + i), blue, green,
-                   red);*/
-            rgbColorClusters.at<Vec3b>(0, i)[0] = red;
-            rgbColorClusters.at<Vec3b>(0, i)[1] = green;
-            rgbColorClusters.at<Vec3b>(0, i)[2] = blue;
-
-        }
-        Mat labColorCluster;
-        cvtColor(rgbColorClusters, labColorCluster, COLOR_BGR2Lab);
-
-// #define P2C_SHOW_KMEAN_WINDOW
-#ifdef P2C_SHOW_KMEAN_WINDOW
-        namedWindow("KMEAN");
-        Mat new_image( regionImgCopy.size(), regionImgCopy.type() );
-
-        cout << labColorCluster << endl;
-        for( int y = 0; y < regionImgCopy.rows; y++ ) {
-            for (int x = 0; x < regionImgCopy.cols; x++) {
-                // Save the index of the Cluster the current pixel is in in cluster_idx
-                // (Labels is (imgCopy.rows * imgCopy.cols) long and saves the cluster every pixel is in).
-                // centers saves the rgb values the center of every cluster.
-                int cluster_idx = labels.at<int>(y + x * regionImgCopy.rows, 0);
-                new_image.at<Vec3b>(y, x)[0] = centers.at<float>(cluster_idx, 0);
-                new_image.at<Vec3b>(y, x)[1] = centers.at<float>(cluster_idx, 1);
-                new_image.at<Vec3b>(y, x)[2] = centers.at<float>(cluster_idx, 2);
             }
-
         }
-        putText(new_image,  playerInRegion->identifier, Point(0,coordinates.height), FONT_HERSHEY_PLAIN, 1, Scalar(0,0,255), 2);
-        imshow("KMEAN", new_image);
-
-        while(true){
-            char c = waitKey(30);
-            if (c == 32) break;
-        }
-#endif
-
-
-    return Mat(labColorCluster);
-}
-
-/*
- * Try to determine the color of the shirt.
- * Perform the k-mean algorithm and check which colors correspond to the pixels in the foreground the most
- */
-Mat Region::getShirtColor(Mat const &frameFull, Mat const & foregroundMask) {
-
-    // Estimation:
-    // Crop the picture head and legs from picture
-    int croppedYSource = coordinates.height / 6;
-    int croppedLength = coordinates.height / 2;
-    Rect croppedRect = Rect(coordinates.x,
-            coordinates.y + croppedYSource,
-            coordinates.width,
-            croppedLength);
-
-
-
-
-    Mat regionImgReference, regionImgCopy;
-
-    Mat foregroundReference = foregroundMask(croppedRect);
-    regionImgReference = frameFull(croppedRect);
-
-    regionImgReference.copyTo(regionImgCopy);
-    Mat frame = regionImgReference;
-
-    const int colorCount  = 2;
-    Mat labels, centers;
-
-    Mat returnKmean = helperBGRKMean(frame, colorCount, labels, centers);
-
-    Mat grayCenters(Size(1, colorCount), CV_8UC3);
-    for(int cluster_idx = 0; cluster_idx < colorCount; ++cluster_idx) {
-        grayCenters.at<Vec3b>(0, cluster_idx)[0] = centers.at<float>(cluster_idx, 0);
-        grayCenters.at<Vec3b>(0, cluster_idx)[1] = centers.at<float>(cluster_idx, 1);
-        grayCenters.at<Vec3b>(0, cluster_idx)[2] = centers.at<float>(cluster_idx, 2);
-    }
-
-    cvtColor(grayCenters, grayCenters, COLOR_BGR2GRAY);
-
-    long weight[colorCount];
-    int numColorAppearances[colorCount];
-
-    // Prepare Arrays
-    for(int index = 0; index < colorCount; ++index){
-        weight[index] = 0;
-        numColorAppearances[index] = 0;
-    }
-
-    /*
-    double yFactor, xFactor; // Range [1,2]
-    int clusterId;
-    float frameRows = frame.rows;
-    float frameCols = frame.cols;
-    for(int y = 0; y < frame.rows; ++y){
-        for(int x = 0; x < frame.cols; ++x){
-             clusterId = labels.at<int>(y + x * frame.rows, 0);
-             if(foregroundReference.at<char>(x,y) != 0) weight[clusterId]++;
-             ++numColorAppearances[clusterId];
-        }
-    }
-     */
-
-    Mat image = Mat(returnKmean);
-    //Prepare the image for findContours
-    cvtColor(image, image, CV_BGR2GRAY);
-
-    // Adapt the threshold so the contours will always be found
-
-    uchar * rowPtr = grayCenters.ptr<uchar>(0);
-    uchar val1 = rowPtr[0];
-    uchar val2;
-    if(! grayCenters.isContinuous()){
-        rowPtr = grayCenters.ptr<uchar>(1);
-        val2 = rowPtr[0];
-    }
-    else{
-        val2 = rowPtr[1];
-    }
-
-    cv::Mat contourImage(image.size(), CV_8UC3, cv::Scalar(0,0,0));
-
-    Mat contoursImageInverted(image.size(), CV_8UC3, Scalar(0,0,0));
-
-    int threshold = (val1 + val2) / 2;
-
-    cv::threshold(image, contourImage, threshold, 255, CV_THRESH_BINARY);
-    cv::threshold(image, contoursImageInverted, threshold, 255, CV_THRESH_BINARY_INV);
-
-    // Mask the Picture
-    Mat maskInverted;
-    regionImgCopy.copyTo(maskInverted, contoursImageInverted);
-
-    Mat masked;
-    regionImgReference.copyTo(masked, contourImage);
-
-    /*
-    imshow("kmean", returnKmean);
-    cvMoveWindow("kmean", 100, 100);
-    imshow("Masked", masked);
-    cvMoveWindow("Masked", 100, 200);
-    imshow("MaskedInv", maskInverted);
-    cvMoveWindow("MaskedInv", 150, 200);
-
-    cv::imshow("Converted KMean", image);
-    cvMoveWindow("Converted KMean", 0, 0);
-    cv::imshow("Contours", contourImage);
-    cvMoveWindow("Contours", 200, 0);
-
-    imshow("inverted", contoursImageInverted);
-    cvMoveWindow("inverted", 100, 100);
-
-    namedWindow("Player");
-    imshow("Player", regionImgReference);
-    cvMoveWindow("Player", 200, 200);
-
-    waitKey(0);
-     */
-
-    vector<Point> nonZeroMask;
-    vector<Point> invertedNonZeroMask;
-
-
-    cv::findNonZero(contourImage, nonZeroMask);
-
-    Mat invertedImage;
-    invertedImage = image.clone();
-
-    cv::findNonZero(contoursImageInverted, invertedNonZeroMask);
-
-    Mat nonZeroPixels(Size(1, nonZeroMask.size()), CV_8UC3);
-
-    nonZeroPixels.zeros(Size(1, nonZeroMask.size()), CV_8UC3);
-
-    Mat invertedNonZeroPixels(Size(1, invertedNonZeroMask.size()), CV_8UC3);
-
-    int column = 0;
-    for(Point const & point:nonZeroMask){
-        nonZeroPixels.at<Vec3b>(0, column) = regionImgCopy.at<Vec3b>(point);
-        ++column;
-    }
-
-    column = 0;
-    for(Point const & point: invertedNonZeroMask){
-        invertedNonZeroPixels.at<Vec3b>(0, column) = regionImgCopy.at<Vec3b>(point);
-        ++column;
-    }
-
-
-    Mat newCenters, newLabels, newCentersInverted;
-
-
-
-    helperBGRKMean(nonZeroPixels, 1, newLabels, newCenters);
-    helperBGRKMean(invertedNonZeroPixels, 1, newLabels, newCentersInverted);
-
-    Mat colorValuesNewCenter(Size(1,1), CV_8UC3);
-    Mat colorValuesNewCenterInverted(Size(1,1), CV_8UC3);
-    uchar * ncPtr = colorValuesNewCenter.ptr(0);
-    ncPtr[0] = newCenters.at<float>(0, 0);
-    ncPtr[1] = newCenters.at<float>(0, 1);
-    ncPtr[2] = newCenters.at<float>(0, 2);
-
-    uchar * ncIPtr = colorValuesNewCenterInverted.ptr(0);
-    ncIPtr[0] = newCentersInverted.at<float>(0, 0);
-    ncIPtr[1] = newCentersInverted.at<float>(0, 1);
-    ncIPtr[2] = newCentersInverted.at<float>(0, 2);
-
-    /*
-    cout << "New Centers:" << endl << newCenters << endl;
-    cout << "Inverted: " << endl << newCentersInverted << endl;
-     */
-
-    // If newCentersInverted is close to red, the player has a red shirt.
-    Mat labColorCenter(Size(1,1), CV_8UC3);
-    cvtColor(colorValuesNewCenterInverted, labColorCenter, CV_BGR2Lab);
-
-    uchar * cPtr = labColorCenter.ptr<uchar>(0);
-
-
-    Mat examplebgr(Size(1,1), CV_8UC3);
-    uchar * exampleptr = examplebgr.ptr<uchar>(0);
-    exampleptr[0] = 17;
-    exampleptr[1] = 36;
-    exampleptr[2] = 123;
-
-
-    cvtColor(examplebgr, examplebgr, CV_BGR2Lab);
-
-    Mat colorValues(1,1,CV_8UC3);
-    uchar * cvPtr = colorValues.ptr(0);
-
-
-    double distanceToRed = deltaECIE94(cPtr[0], cPtr[1], cPtr[2],
-            exampleptr[0], exampleptr[1], exampleptr[2]);
-
-    /*
-    if( distanceToRed < 20){
-        cvPtr[0] = 0;
-        cvPtr[1] = 0;
-        cvPtr[2] = 255;
-        cout << "is red, accepted with: " << distanceToRed << endl;
-
-    }
-    else{
-        cvPtr[0] = 255;
-        cvPtr[1] = 255;
-        cvPtr[2] = 255;
-        cout << "is white, rejected with:" << distanceToRed << endl;
-    }
-     */
-
-    /*
-    cvPtr[0] = centers.at<float>(colorIndex, 0);
-    cvPtr[1] = centers.at<float>(colorIndex, 1);
-    cvPtr[2] = centers.at<float>(colorIndex, 2);
-     */
-
-
-    return colorValues;
-}
-
-/*
- * Fills the Paramters bgrShirtColor and labShirtColor.
- */
-void Region::createColorProfile(Mat const &frame, Mat const & foregroundMask) {
-    Mat bgrShirtColorTemp = getShirtColor(frame, foregroundMask);
-    Mat labShirtColorTemp;
-    cvtColor(bgrShirtColorTemp, labShirtColorTemp, CV_BGR2Lab);
-
-    auto * bgrColorPtr = bgrShirtColorTemp.ptr<uchar>(0);
-    auto * labColorPtr = labShirtColorTemp.ptr<uchar>(0);
-
-    for(int i = 0; i < 3; ++i){
-        labShirtColor[i] = labColorPtr[i];
-        bgrShirtColor[i] = bgrColorPtr[i];
     }
 }
 
+
+/* ***********************
+ *                       *
+ *  Helper Functions     *
+ *                       *
+ *************************/
 
 
 void textAboveRect(Mat frame, Rect rect, string text) {
@@ -1922,7 +1238,11 @@ void histFromRect(Mat const &input, Rect const &rect, Mat &output) {
 }
 
 
-// See https://en.wikipedia.org/wiki/Color_difference#CIE94 for the formula
+
+/*
+ *  Calculate the perceived difference between two colors
+ *  See https://en.wikipedia.org/wiki/Color_difference#CIE94 for the formula
+ */
 double deltaECIE94(unsigned char L1, char a1, char b1, unsigned char L2, char a2, char b2) {
     // Two constants for our purpos (graphics)
     const double K1 = 0.045;
@@ -2001,3 +1321,9 @@ Mat  helperBGRKMean(Mat const &frame, int clusterCount, Mat &labels, Mat &center
 
 }
 
+bool playerInRegionVector(FootballPlayer * fp, vector<Region> const & vr){
+
+    for(Region const & r: vr) if (fp == r.playerInRegion) return true;
+
+    return false;
+}

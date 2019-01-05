@@ -7,7 +7,7 @@
 
 #include <string>
 #include <vector>
-#include "detect.h"
+#include "../Detectors/detect.h"
 
 #include <opencv2/core/utility.hpp>
 
@@ -33,6 +33,13 @@
 
 #include "TrackingHelpers.h"
 
+
+class Region;
+class MetaRegion;
+class FootballPlayer;
+
+using namespace std;
+
 class RegionTracker{
 public:
 
@@ -50,7 +57,6 @@ public:
 
 
     virtual ~RegionTracker();
-
 
     Mat matCurrentFrame;
 
@@ -123,6 +129,9 @@ protected:
 
 };
 
+/*
+ * Some Helper Functions.
+ */
 void textAboveRect(Mat frame, Rect rect, string text);
 void histFromRect(Mat const & input, Rect const & rect, Mat & output);
 /* Color difference as described by https://en.wikipedia.org/wiki/Color_difference#CIE94
@@ -136,6 +145,6 @@ double deltaECIE94(unsigned char L1, char  a1, char b1, unsigned char L2, char a
  * Labels has one Row and frame.cols * frame.rows columns, representing the frames pixel like this : frame[row, col] = labels[row * frame.cols + col]
  */
 Mat helperBGRKMean(Mat const &frame, int clusterCount, Mat &labels, Mat &centers);
-
+bool playerInRegionVector(FootballPlayer * fp, vector<Region> const & vr);
 // void optimizeWeightSelection(int rows, int cols, double * weightMatrix, int * selected)
 #endif //PANORAMA2CUBEMAP_TRACKING_H

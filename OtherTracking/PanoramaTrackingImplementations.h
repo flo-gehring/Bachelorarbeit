@@ -6,7 +6,7 @@
 #define PANORAMA2CUBEMAP_PANORAMATRACKINGIMPLEMENTATIONS_H
 
 #include "PanoramaTracking.h"
-#include "detect.h"
+#include "../Detectors/detect.h"
 
 
 

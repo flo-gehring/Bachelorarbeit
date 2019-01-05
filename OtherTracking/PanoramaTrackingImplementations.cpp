@@ -3,7 +3,7 @@
 //
 
 #include "PanoramaTrackingImplementations.h"
-#include "cubetransform.h"
+#include "../cubetransform.h"
 
 
 int CubeMapProjector::beginProjection() {

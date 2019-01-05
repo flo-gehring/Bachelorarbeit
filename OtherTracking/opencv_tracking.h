@@ -15,8 +15,8 @@
 #include <vector>
 #include <ctime>
 
-#include "cubetransform.h"
-#include "detect.h"
+#include "../cubetransform.h"
+#include "../Detectors/detect.h"
 
 using namespace std;
 using namespace cv;

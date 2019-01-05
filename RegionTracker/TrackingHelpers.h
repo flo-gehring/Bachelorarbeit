@@ -2,13 +2,14 @@
 // Created by flo on 03.12.18.
 //
 
+
 #ifndef PANORAMA2CUBEMAP_TRACKINGHELPERS_H
 #define PANORAMA2CUBEMAP_TRACKINGHELPERS_H
 
 
 #include <string>
 #include <vector>
-#include "detect.h"
+#include "../Detectors/detect.h"
 
 #include <opencv2/core/utility.hpp>
 
@@ -28,7 +29,7 @@
 #include "array"
 
 
-#include "cubetransform.h"
+#include "../cubetransform.h"
 #include "tracking.h"
 
 using namespace std;
@@ -67,14 +68,11 @@ public:
 
 };
 
-
-
-
 class Region{
 public:
     Region() = default;
     Region(const Rect &coordinates,  FootballPlayer * ptrPlayer);
-    Region(Rect coordinates);
+    explicit Region(Rect coordinates);
     Region(Region const & r1);
 
     Rect coordinates;
@@ -111,6 +109,4 @@ public:
     int *  matchOldAndNewRegions(Mat frame, int * matching, int frameNum, RegionTracker * rt);
 
 };
-
-
 #endif //PANORAMA2CUBEMAP_TRACKINGHELPERS_H
