@@ -2,6 +2,7 @@
 // Created by flo on 03.12.18.
 //
 
+
 #ifndef PANORAMA2CUBEMAP_TRACKINGHELPERS_H
 #define PANORAMA2CUBEMAP_TRACKINGHELPERS_H
 
@@ -67,9 +68,6 @@ public:
 
 };
 
-
-
-
 class Region{
 public:
     Region() = default;
@@ -111,6 +109,4 @@ public:
     int *  matchOldAndNewRegions(Mat frame, int * matching, int frameNum, RegionTracker * rt);
 
 };
-
-
 #endif //PANORAMA2CUBEMAP_TRACKINGHELPERS_H
