@@ -81,17 +81,19 @@ int main(int argc, char *argv[]) {
     */
 
     RegionTracker rt;
+    rt.assignmentThreshold = 2.5;
+    rt.minDistanceThreshold = 0.3;
     int i = 0;
     for(string const & s : videonames){
         if(strcmp(argv[1], "save") == 0) {
-            //rt.enableVideoSave(("newColor_and_thresh" + s).c_str());
-            //rt.setupAnalysisOutFile(("newColor_andThresh_analysis_" + s + ".data").c_str());
+            rt.enableVideoSave(("0701" + s).c_str());
+            rt.setupAnalysisOutFile(("0701" + s + ".data").c_str());
         }
        // rt.setAOIFile(("hmm_" + s + ".csv").c_str());
 
-        rt.darknetDetector.loadAOI("data/AOI/neu_aoi_TS_10_5.data");
-        rt.trackVideo((prefix+s).c_str());
-        cout << s << " finished.." << endl;
+       rt.darknetDetector.loadAOI("data/AOI/neu_aoi_TS_10_5.data");
+       rt.trackVideo((prefix+s).c_str());
+       cout << s << " finished.." << endl;
 
         ++i;
     }
