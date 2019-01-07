@@ -335,7 +335,7 @@ Mat Region::getShirtColor(Mat const &frameFull, Mat const & foregroundMask) {
     Mat masked;
     regionImgReference.copyTo(masked, contourImage);
 
-    /*
+#ifdef undef
     imshow("kmean", returnKmean);
     cvMoveWindow("kmean", 100, 100);
     imshow("Masked", masked);
@@ -355,8 +355,7 @@ Mat Region::getShirtColor(Mat const &frameFull, Mat const & foregroundMask) {
     imshow("Player", regionImgReference);
     cvMoveWindow("Player", 200, 200);
 
-    waitKey(0);
-     */
+#endif
 
     vector<Point> nonZeroMask;
     vector<Point> invertedNonZeroMask;
@@ -388,8 +387,8 @@ Mat Region::getShirtColor(Mat const &frameFull, Mat const & foregroundMask) {
     }
 
 
-    Mat newCenters, newLabels, newCentersInverted;
 
+    Mat newCenters, newLabels, newCentersInverted;
 
 
     helperBGRKMean(nonZeroPixels, 1, newLabels, newCenters);
@@ -410,17 +409,27 @@ Mat Region::getShirtColor(Mat const &frameFull, Mat const & foregroundMask) {
     /*
     cout << "New Centers:" << endl << newCenters << endl;
     cout << "Inverted: " << endl << newCentersInverted << endl;
-     */
+    */
+
 
     // If newCentersInverted is close to red, the player has a red shirt.
     Mat labColorCenter(Size(1,1), CV_8UC3);
-    cvtColor(colorValuesNewCenterInverted, labColorCenter, CV_BGR2Lab);
+    Mat hsvColorCenterInverted(Size(1,1), CV_8UC3);
 
-    uchar * cPtr = labColorCenter.ptr<uchar>(0);
+
+    cvtColor(colorValuesNewCenterInverted, labColorCenter, CV_BGR2Lab);
+    cvtColor(colorValuesNewCenterInverted, hsvColorCenterInverted, CV_BGR2HSV);
+
+    auto *  hsvPtr = hsvColorCenterInverted.ptr<uchar>(0);
+    uchar hue = hsvPtr[0];
+
+
+
+    auto * cPtr = labColorCenter.ptr<uchar>(0);
 
 
     Mat examplebgr(Size(1,1), CV_8UC3);
-    uchar * exampleptr = examplebgr.ptr<uchar>(0);
+    auto * exampleptr = examplebgr.ptr<uchar>(0);
     exampleptr[0] = 17;
     exampleptr[1] = 36;
     exampleptr[2] = 123;
@@ -428,26 +437,34 @@ Mat Region::getShirtColor(Mat const &frameFull, Mat const & foregroundMask) {
 
     cvtColor(examplebgr, examplebgr, CV_BGR2Lab);
 
-    Mat colorValues(1,1,CV_8UC3);
-    uchar * cvPtr = colorValues.ptr(0);
+    resize(colorValuesNewCenter, colorValuesNewCenter, Size(30, 30));
+    resize(colorValuesNewCenterInverted, colorValuesNewCenterInverted, Size(30, 30));
 
+#ifdef undef
+    imshow("Color", colorValuesNewCenter);
+    imshow("Color Inverted", colorValuesNewCenterInverted);
+    waitKey(0);
+#endif
 
     double distanceToRed = deltaECIE94(cPtr[0], cPtr[1], cPtr[2],
                                        exampleptr[0], exampleptr[1], exampleptr[2]);
 
+    // Use the Color Center with the higher red value;
 
-    if( distanceToRed < 20){
+    Mat colorValues(1,1,CV_8UC3);
+    uchar * cvPtr = colorValues.ptr(0);
+    if( hue < 15 || hue > 150){
         cvPtr[0] = 0;
         cvPtr[1] = 0;
         cvPtr[2] = 255;
-        cout << "is red, accepted with: " << distanceToRed << endl;
+
 
     }
     else{
         cvPtr[0] = 255;
         cvPtr[1] = 255;
         cvPtr[2] = 255;
-        cout << "is white, rejected with:" << distanceToRed << endl;
+
     }
 
 
