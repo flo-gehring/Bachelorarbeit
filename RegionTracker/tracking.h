@@ -43,6 +43,9 @@ using namespace std;
 class RegionTracker{
 public:
 
+    double assignmentThreshold;
+    double minDistanceThreshold;
+
     RegionTracker();
     explicit RegionTracker(const char * aoiFilePath, const char * videoPath = nullptr);
 

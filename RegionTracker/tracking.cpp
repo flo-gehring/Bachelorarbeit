@@ -7,6 +7,8 @@
 
 #include <set>
 
+// TODO: Better Management of lost Players. Some old "residue" players cause ambigouity.
+
 /*
  * Initializes the Tracker.
  * Performs the first round of detection which differs slightly from the following.
@@ -106,6 +108,18 @@ bool RegionTracker::update(Mat frame) {
     return false;
 }
 
+
+bool yAxisOverlap(Rect const & r1, Rect const & r2, int distanceThreshold){
+    auto inBetween = [](int x, int y, int z, int inaccuracy){
+        return (x + inaccuracy > y && x - inaccuracy < z);
+    };
+    auto oneSided = [inBetween](Rect const & r1, Rect const & r2, int distanceThreshold){
+        return inBetween(r1.y, r2.y, r2.y + r2.height, distanceThreshold) ||
+            inBetween(r1.y + r1.height,  r2.y, r2.y + r2.height, distanceThreshold);
+    };
+    return oneSided(r1, r2, distanceThreshold) || oneSided(r2, r1, distanceThreshold);
+}
+
 /*
  * Projects the frame, which is an equirectangular Panorama, onto the six sides of a cube and performs object
  * Detection on them.
@@ -153,9 +167,9 @@ vector<Rect> RegionTracker::detectOnFrame(Mat  & frame) {
     // This only makes sense for the first 4 face sides.
     // TODO: Actually we may be able to remove scores, which makes the loop simpler.
     int rightFace;
-    int spaceThreshold  = 5; //
-    for(int leftFace = 0; leftFace < 4; ++leftFace){
-        rightFace = (leftFace + 1) % 4; //Wrap around if you reach the right most cube face.
+    int spaceThreshold  = 2; //
+    for(int leftFace = 0; leftFace < numOfFaces; ++leftFace){
+        rightFace = (leftFace + 1) % numOfFaces; //Wrap around if you reach the right most cube face.
 
         for(Rect  & leftRect: tmpDetected[leftFace]){
             if(leftRect.x + leftRect.width > sideLength - spaceThreshold){
@@ -163,9 +177,16 @@ vector<Rect> RegionTracker::detectOnFrame(Mat  & frame) {
                 for(int  iteratorOffset = 0 ; tmpDetected[rightFace].begin() + iteratorOffset !=  tmpDetected[rightFace].end(); ){
 
                     Rect & rightRect = tmpDetected[rightFace][iteratorOffset];
-                    if(rightRect.x < spaceThreshold && // Check if the Bounding Boxes overlap on the vertical axis.
-                            ((leftRect.y - spaceThreshold <=  rightRect.y && leftRect.y + spaceThreshold >= rightRect.y)
-                            || (leftRect.y - spaceThreshold <= rightRect.y + rightRect.height && leftRect.y + spaceThreshold >= rightRect.y + rightRect.height))){ // Bounding Boxes probably denote the same player.
+
+                    if(rightRect.x - spaceThreshold <= 0 && yAxisOverlap(leftRect, rightRect, spaceThreshold)){ // Bounding Boxes probably denote the same player.
+
+
+                        string debugString = "Union of Rect(%i, %i, %i %i) and Rect(%i, %i, %i %i) on Faces %i -> %i . \n";
+                        if(debugData){
+                            fprintf(debugData, debugString.c_str(), leftRect.x, leftRect.y, leftRect.width, leftRect.height,
+                                    rightRect.x, rightRect.y,  rightRect.width, rightRect.height, leftFace, rightFace);
+                        }
+
 
                         if(rightFace != 0){
                             leftRect.width += rightRect.width;
@@ -646,8 +667,8 @@ double RegionTracker::calcWeightedSimiliarity2(const Region  * oldRegion, const 
  */
 void RegionTracker::assignRegions( MetaRegion & metaRegion) {
 
-    double assignmentThreshold = 2.5f;
-    double minDistanceThreshold = 0.3f;
+    // double assignmentThreshold = 1.0f;
+    // double minDistanceThreshold = 0.0f;
 
     set<int> indicesUnassignedOld;
     set<FootballPlayer *> playersAssignedInThisFrame;
