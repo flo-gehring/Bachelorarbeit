@@ -94,8 +94,7 @@ int main(int argc, char *argv[]) {
        rt.darknetDetector.loadAOI("data/AOI/neu_aoi_TS_10_5.data");
        rt.trackVideo((prefix+s).c_str());
        cout << s << " finished.." << endl;
-
-        ++i;
+       rt.printTrackingResults("trackingResult.txt");
     }
 
 

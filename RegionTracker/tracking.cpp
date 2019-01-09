@@ -1178,6 +1178,8 @@ void RegionTracker::setupAnalysisOutFile(const char * filename){
 
 }
 
+
+
 FootballPlayer *RegionTracker::createAmbiguousPlayer(Rect const & coordinates) {
     FootballPlayer * fp = new FootballPlayer(coordinates, currentFrame, string(to_string(-1)));
     this->footballPlayers.push_back(fp);
@@ -1209,6 +1211,51 @@ void RegionTracker::printInfo(vector<MetaRegion> const & metaRegions) {
 
             }
         }
+    }
+}
+
+void RegionTracker::printTrackingResults(const char * filePath) {
+
+    FILE * outFile = fopen(filePath, "w");
+
+    if(! outFile) {
+        cerr << "Could not open file " << filePath << " to print results!" << endl;
+        exit(-1);
+    }
+
+    vector<map<int, Rect>> playerFrameOccurences;
+    int maxFrame = 0;
+    for(FootballPlayer * fp : footballPlayers) {
+        if (! fp->frames.empty() && fp->frames.back() > maxFrame) maxFrame = fp->frames.back();
+        playerFrameOccurences.emplace_back(map<int, Rect>());
+
+        for(int i = 0; i < fp->frames.size(); ++i){
+
+            playerFrameOccurences.back()[fp->frames[i]] =  fp->coordinates[i];
+
+        }
+    }
+
+    Rect currentCoordinates;
+    int id;
+    int bbLeft, bbTop, bbWidth, bbHeight;
+    for(int currentFrame = 0; currentFrame <= maxFrame; ++currentFrame){
+        id = 0;
+        for(map<int, Rect>  & frameOccurences: playerFrameOccurences){
+
+            auto coordinatesInFrame = frameOccurences.find(currentFrame);
+            currentCoordinates = coordinatesInFrame->second;
+            bbLeft = currentCoordinates.x;
+            bbTop = currentCoordinates.y;
+            bbWidth = currentCoordinates.width;
+            bbHeight = currentCoordinates.height;
+
+            if(coordinatesInFrame != frameOccurences.end()){
+                fprintf(outFile, "%i, %i, %i, %i, %i, %i, 0, -1, -1, -1\n", coordinatesInFrame->first, id, bbLeft, bbTop, bbWidth, bbHeight);
+            }
+            ++id;
+        }
+
     }
 }
 

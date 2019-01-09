@@ -57,6 +57,7 @@ public:
     int initialize(Mat frame);
     bool update(Mat frame);
 
+    void printTrackingResults(const char * resultFilePath);
 
 
     virtual ~RegionTracker();
@@ -94,8 +95,6 @@ protected:
     /*
      * Factory Methods: Get Regions etc.
      */
-
-    FootballPlayer playerById(string id);
     void deleteFromOutOfSight(FootballPlayer *);
     void addToOutOfSight(Region *);
 
