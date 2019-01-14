@@ -71,9 +71,11 @@ int RegionTracker::initialize(Mat frame) {
  */
 bool RegionTracker::update(Mat frame) {
 
+    matLastFrame = Mat(matCurrentFrame);
+
     matCurrentFrame = Mat(frame);
 
-    pBGSubtractor->apply(frame, foregroundMask);
+    pBGSubtractor->apply(frame, foregroundMask); // TODO: do i still need the bg subtractor?
 
     ++currentFrame;
     // Update Region Vectors, new regions from last frame are now old, get new Regions from detector
@@ -85,6 +87,7 @@ bool RegionTracker::update(Mat frame) {
     for(Rect const & rect: newRects){
 
         regionsNewFrame.emplace_back(Region(rect));
+
         assert((rect).area() != 0);
     }
 
@@ -96,7 +99,7 @@ bool RegionTracker::update(Mat frame) {
 
     for(Region & newRegion: regionsNewFrame) newRegion.updatePlayerInRegion(currentFrame);
 
-    printInfo(vectorMetaRegion);
+    // printInfo(vectorMetaRegion);
 
     // Delete Regions who have not been found for too long.
     /*
@@ -314,8 +317,6 @@ void RegionTracker::trackVideo(const char *filename) {
         ++frameCounter;
    } */
 
-
-
     while(! frame.empty()){
 
         if(analysisData){
@@ -384,6 +385,7 @@ void RegionTracker::trackVideo(const char *filename) {
 
 
 
+
 /*
  * Tries to determine some "Meta Regions" by grouping all the Regions in physical proximity together.
  * If a region from the last frame has no new region at all nearby, they will be marked as out of sight.
@@ -410,7 +412,7 @@ vector<MetaRegion> RegionTracker::calcMetaRegions() {
     associatedMRFound.reserve(regionLastFrame.size());
     unordered_set<Region *> outOfSightFound;
 
-    while(! indicesUnhandledRegions.empty()){
+    while(!indicesUnhandledRegions.empty()){
 
         // Create a new Meta Region, with an arbitrary available Region from the new Frame
         currentRegion = &regionsNewFrame[indicesUnhandledRegions.back()];
@@ -429,81 +431,13 @@ vector<MetaRegion> RegionTracker::calcMetaRegions() {
         while(!areaUnchanged){
 
             areaUnchanged = true;
-            // TODO Refactor
-            for(auto newRegionIndex = indicesUnhandledRegions.begin();
-            newRegionIndex != indicesUnhandledRegions.end(); /*Do nothing */){
+            areaUnchanged &= addRegionsToMeta(regionsNewFrame, indicesUnhandledRegions, currentMetaRegion,
+                    false, associatedMRFound);
+            areaUnchanged &= addRegionPtrToMeta(outOfSightRegions, indicesUnhandledOutOfSight, currentMetaRegion,
+                    true, associatedMRFound);
+            areaUnchanged &= addRegionsToMeta(regionLastFrame, indicesUnhandledOld, currentMetaRegion,
+                    true, associatedMRFound);
 
-                regionToCompare = &regionsNewFrame[*newRegionIndex];
-
-                // A new Region from the current Frame for the Meta Region
-                if(Region::regionsIntersect(*regionToCompare, Region(currentMetaRegion.area))
-                || Region::regionsInRelativeProximity(*regionToCompare, Region(currentMetaRegion.area), 10)){ // TODO Num of frames passed is magic literal
-                //if((regionToCompare->coordinates & currentMetaRegion.area).area() > 0){
-
-                    areaUnchanged = false;
-
-                    currentMetaRegion.area |= regionToCompare->coordinates;
-                    currentMetaRegion.metaNewRegions.push_back(& regionsNewFrame[* newRegionIndex]);
-
-                    indicesUnhandledRegions.erase(newRegionIndex);
-
-                }
-                else{ // Only increase iterator if no Element was deleted.
-                    ++newRegionIndex;
-                }
-            }
-
-            for(auto outOfSightIndex = indicesUnhandledOutOfSight.begin();
-                outOfSightIndex!= indicesUnhandledOutOfSight.end(); /*Do nothing */){
-
-                regionToCompare = outOfSightRegions[*outOfSightIndex];
-
-
-
-                // A new Region from the current Frame for the Meta Region
-                if(Region::regionsIntersect(*regionToCompare, Region(currentMetaRegion.area))
-                   || Region::regionsInRelativeProximity(*regionToCompare, Region(currentMetaRegion.area), 10)){ // TODO Num of frames passed is magic literal
-                    //if((regionToCompare->coordinates & currentMetaRegion.area).area() > 0){
-
-                    areaUnchanged = false;
-
-                    currentMetaRegion.area |= regionToCompare->coordinates;
-                    currentMetaRegion.metaOldRegions.push_back(outOfSightRegions[* outOfSightIndex]);
-
-                    outOfSightFound.insert(outOfSightRegions[*outOfSightIndex]);
-
-                    indicesUnhandledOutOfSight.erase(outOfSightIndex);
-
-                }
-                else{ // Only increase iterator if no Element was deleted.
-                    ++outOfSightIndex;
-                }
-            }
-
-            for(auto lastFrameIndex = indicesUnhandledOld.begin();
-                lastFrameIndex != indicesUnhandledOld.end(); /*Do nothing */){
-
-                regionToCompare = &regionLastFrame[*lastFrameIndex];
-
-                // A new Region from the current Frame for the Meta Region
-                if(Region::regionsIntersect(*regionToCompare, Region(currentMetaRegion.area))
-                   || Region::regionsInRelativeProximity(*regionToCompare, Region(currentMetaRegion.area), 10)){ // TODO Num of frames passed is magic literal
-                    //if((regionToCompare->coordinates & currentMetaRegion.area).area() > 0){
-
-                    areaUnchanged = false;
-
-                    currentMetaRegion.area |= regionToCompare->coordinates;
-                    currentMetaRegion.metaOldRegions.push_back(& regionLastFrame[* lastFrameIndex]);
-
-                    associatedMRFound.insert( &regionLastFrame[* lastFrameIndex]);
-
-                    indicesUnhandledOld.erase(lastFrameIndex);
-
-                }
-                else{ // Only increase iterator if no Element was deleted.
-                    ++lastFrameIndex;
-                }
-            }
         }
 
     }
@@ -1191,24 +1125,27 @@ FootballPlayer *RegionTracker::createAmbiguousPlayer(Rect const & coordinates) {
 
 void RegionTracker::printInfo(vector<MetaRegion> const & metaRegions) {
 
-    FootballPlayer * fp;
-    Rect  * coordinates;
-    for(Region const & region:regionsNewFrame){
-        fp = region.playerInRegion;
-        coordinates = & fp->coordinates.back();
-        fprintf(roiData, "%i;%s;%i;%i;%i;%i\n", currentFrame, fp->identifier.c_str(), coordinates->x, coordinates->y, coordinates->width, coordinates->height);
-    }
+    if(roiData) {
+        FootballPlayer *fp;
+        Rect *coordinates;
+        for (Region const &region:regionsNewFrame) {
+            fp = region.playerInRegion;
+            coordinates = &fp->coordinates.back();
+            fprintf(roiData, "%i;%s;%i;%i;%i;%i\n", currentFrame, fp->identifier.c_str(), coordinates->x,
+                    coordinates->y, coordinates->width, coordinates->height);
+        }
 
-    for(MetaRegion const & metaRegion: metaRegions){
-        for(Region * regionInMeta : metaRegion.metaNewRegions){
-            fp = regionInMeta->playerInRegion;
-            if(! playerInRegionVector(fp, regionsNewFrame)){
-                fprintf(roiData, "%i;%s;%i;%i;%i;%i\n", currentFrame, fp->identifier.c_str(),
-                        regionInMeta->coordinates.x,
-                        regionInMeta->coordinates.y,
-                        regionInMeta->coordinates.width,
-                        regionInMeta->coordinates.height);
+        for (MetaRegion const &metaRegion: metaRegions) {
+            for (Region *regionInMeta : metaRegion.metaNewRegions) {
+                fp = regionInMeta->playerInRegion;
+                if (!playerInRegionVector(fp, regionsNewFrame)) {
+                    fprintf(roiData, "%i;%s;%i;%i;%i;%i\n", currentFrame, fp->identifier.c_str(),
+                            regionInMeta->coordinates.x,
+                            regionInMeta->coordinates.y,
+                            regionInMeta->coordinates.width,
+                            regionInMeta->coordinates.height);
 
+                }
             }
         }
     }
@@ -1258,6 +1195,76 @@ void RegionTracker::printTrackingResults(const char * filePath) {
 
     }
 }
+
+/*
+ *
+ *  Feature Extraction
+ *
+ */
+
+void RegionTracker::calcOpticalFlow(Rect const &area) {
+#ifdef UNDEF
+    Mat inputOld = matLastFrame(area);
+    Mat inputNew = matCurrentFrame(area);
+
+
+
+    Ptr<DenseOpticalFlow> denseflow = optflow::createOptFlow_PCAFlow();
+
+    Mat grayOld, grayNew;
+    cvtColor(inputOld, grayOld, CV_BGR2GRAY);
+    cvtColor(inputNew, grayNew, CV_BGR2GRAY);
+
+
+    Mat ioArray;
+
+    denseflow->calc(grayOld, grayNew, ioArray);
+    /*optflow::calcOpticalFlowSF(inputOld, inputNew, ioArray,3, 2, 4, 4.1, 25.5, 18, 55.0,
+            25.5, 0.35, 18, 55.0, 25.5, 10);*/
+
+    const Size sz = ioArray.size();
+    Mat flow = ioArray;
+
+    Mat img(sz, CV_32FC3);
+
+    for ( int i = 0; i < sz.height; ++i ){
+        for ( int j = 0; j < sz.width; ++j ) {
+            Vec2f point = ioArray.at<Vec2f>(i, j);
+            if(point[0] + point[1] != 0) {
+                img.at<Vec3f>(i,j)[0] = 100;
+                img.at<Vec3f>(i,j)[1] = 100;
+                img.at<Vec3f>(i,j)[2] = 100;
+            }
+            else {
+                img.at<Vec3f>(i, j)[0] = 0;
+                img.at<Vec3f>(i, j)[1] = 0;
+                img.at<Vec3f>(i, j)[2] = 0;
+            }
+        }
+    }
+
+
+
+    cvtColor( img, img, COLOR_HSV2BGR );
+    namedWindow("asdf1");
+    namedWindow("asdf2");
+    imshow("asdf1", inputOld);
+    imshow("asdf2", inputNew);
+    namedWindow("asdf3");
+    moveWindow("asdf3", 100, 100);
+    imshow("asdf3", img);
+
+    cout << ioArray << endl;
+    waitKey(10);
+
+    denseflow.release();
+
+
+    // cout << ioArray << endl;
+
+#endif
+}
+
 
 
 /* ***********************

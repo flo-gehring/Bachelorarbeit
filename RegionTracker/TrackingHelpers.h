@@ -109,4 +109,15 @@ public:
     int *  matchOldAndNewRegions(Mat frame, int * matching, int frameNum, RegionTracker * rt);
 
 };
+
+/*
+ * Helper Methods to calculate the MetaRegions.
+ */
+bool addRegionPtrToMeta(vector<Region * > & regionPool, vector<int> & unhandledFromPool,
+                        MetaRegion & metaRegionToCompare, bool pushToOld,  unordered_set<Region *> & associatedMRFound );
+bool addRegionsToMeta(vector<Region> & regionPool, vector<int> & unhandledFromPool,
+                      MetaRegion & metaRegionToCompare,
+                      bool pushToOld,  unordered_set<Region *> & associatedMRFound );
+bool addRegionPtrToMeta(vector<Region * > & regionPool, vector<int> & unhandledFromPool,
+                       MetaRegion & metaRegionToCompare, bool pushToOld,  unordered_set<Region *> & associatedMRFound);
 #endif //PANORAMA2CUBEMAP_TRACKINGHELPERS_H

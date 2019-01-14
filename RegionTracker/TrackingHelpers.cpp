@@ -122,11 +122,14 @@ void Region::updatePlayerInRegion(int frameNum) {
 Region::Region(const Rect &coordinates, FootballPlayer *  ptrPlayer) {
     this->coordinates = coordinates;
     playerInRegion = ptrPlayer;
+//    opticalFlowKeypoints = vector<Point>();
 }
 
 Region::Region(Rect coordinates) {
     this->coordinates = coordinates;
     playerInRegion = nullptr;
+  //  opticalFlowKeypoints = vector<Point>();
+
 }
 
 
@@ -492,4 +495,80 @@ void Region::createColorProfile(Mat const &frame, Mat const & foregroundMask) {
         labShirtColor[i] = labColorPtr[i];
         bgrShirtColor[i] = bgrColorPtr[i];
     }
+}
+
+/*
+ *  Functions to calculate Meta Regions
+ *
+ */
+
+
+bool checkAddRegionToMeta(Region * regionToCompare, vector<int> & unhandledFromPool,
+                          MetaRegion & metaRegionToCompare, std::vector<int>::iterator  & regionPoolIndex,
+                          bool pushToOld,  unordered_set<Region *> & associatedMRFound ){
+
+    bool areaUnchanged = true;
+    // A new Region from the current Frame for the Meta Region
+    if(Region::regionsIntersect(*regionToCompare, Region(metaRegionToCompare.area))
+       || Region::regionsInRelativeProximity(*regionToCompare, Region(metaRegionToCompare.area), 10)){ // TODO Num of frames passed is magic literal
+        //if((regionToCompare->coordinates & currentMetaRegion.area).area() > 0){
+
+        areaUnchanged = false;
+
+        metaRegionToCompare.area |= regionToCompare->coordinates;
+        if(pushToOld){
+            metaRegionToCompare.metaOldRegions.push_back(regionToCompare);
+            associatedMRFound.insert(regionToCompare);
+        }
+        else {
+            metaRegionToCompare.metaNewRegions.push_back(regionToCompare);
+        }
+
+        unhandledFromPool.erase(regionPoolIndex);
+
+    }
+    else{ // Only increase iterator if no Element was deleted.
+        ++regionPoolIndex;
+    }
+
+    return areaUnchanged;
+
+}
+
+
+bool addRegionsToMeta(vector<Region> & regionPool, vector<int> & unhandledFromPool,
+                      MetaRegion & metaRegionToCompare,
+                      bool pushToOld,  unordered_set<Region *> & associatedMRFound ){
+
+    Region * regionToCompare;
+    bool areaUnchanged = true;
+
+    for(auto newRegionIndex = unhandledFromPool.begin();
+        newRegionIndex != unhandledFromPool.end(); /*Do nothing */){
+
+        regionToCompare = &regionPool[*newRegionIndex];
+
+        areaUnchanged &= checkAddRegionToMeta(regionToCompare,
+                                              unhandledFromPool, metaRegionToCompare, newRegionIndex, pushToOld, associatedMRFound);
+
+    }
+    return areaUnchanged;
+}
+
+bool addRegionPtrToMeta(vector<Region * > & regionPool, vector<int> & unhandledFromPool,
+                        MetaRegion & metaRegionToCompare, bool pushToOld,  unordered_set<Region *> & associatedMRFound ){
+
+    Region * regionToCompare;
+    bool areaUnchanged = true;
+
+    for(auto newRegionIndex = unhandledFromPool.begin();
+        newRegionIndex != unhandledFromPool.end(); /*Do nothing */){
+
+        regionToCompare = regionPool[*newRegionIndex];
+        areaUnchanged &= checkAddRegionToMeta(regionToCompare, unhandledFromPool,
+                                              metaRegionToCompare, newRegionIndex, pushToOld, associatedMRFound);
+
+    }
+    return areaUnchanged;
+
 }

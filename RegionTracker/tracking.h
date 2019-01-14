@@ -15,6 +15,12 @@
 #include <opencv2/highgui.hpp>
 #include <opencv2/dnn.hpp>
 #include <opencv2/video/background_segm.hpp>
+#include <opencv2/tracking.hpp>
+
+#include "opencv2/optflow/pcaflow.hpp"
+#include "opencv2/optflow/sparse_matching_gpc.hpp"
+#include "opencv2/optflow/motempl.hpp"
+#include <opencv2/optflow.hpp>
 
 
 #include <iostream>
@@ -63,6 +69,7 @@ public:
     virtual ~RegionTracker();
 
     Mat matCurrentFrame;
+    Mat matLastFrame; // Add to support optical Flow stuff.
 
     FILE * roiData;
     FILE * debugData;
@@ -126,6 +133,9 @@ protected:
      */
     Ptr<BackgroundSubtractor> pBGSubtractor;
     Mat foregroundMask;
+
+    // OPticalFlow
+    void calcOpticalFlow(Rect const & area);
 
 
 
