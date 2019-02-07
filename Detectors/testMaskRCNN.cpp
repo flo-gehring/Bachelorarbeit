@@ -4,11 +4,20 @@
 
 #include "testMaskRCNN.h"
 
+#include "../RegionTracker/tracking.h"
+
+
     vector<string> classes;
     vector<Scalar> colors;
     float confThreshold, maskThreshold;
 
-    void detectOnVideo(const char *filePath, Projector *projector) {
+    vector<Rect> detectionsOnFrame;
+    vector<int> detectionsOnProjectionId;
+
+
+
+
+void detectOnVideo(const char *filePath, Projector *projector, FILE * outfile) {
 
         classes.clear();
         colors.clear();
@@ -25,7 +34,7 @@
         Mat frame, blob;
         videoCapture >> frame;
 
-        std::string directory = "./mask_rcnn_inception_v2_coco_2018_01_28/";
+        std::string directory = "./Detectors/mask_rcnn_inception_v2_coco_2018_01_28/";
 
         // Load names of classes
         std::string classesFile = directory + "ms_coco.names";
@@ -38,14 +47,18 @@
         String textGraph = directory + "mask_rcnn_inception_v2_coco_2018__01_28.pbtxt";
         String modelWeights = directory + "frozen_inference_graph.pb";
 
-// Load the network
+    // Load the network
         Net net = readNetFromTensorflow(modelWeights, textGraph);
         net.setPreferableBackend(DNN_BACKEND_OPENCV);
         net.setPreferableTarget(DNN_TARGET_CPU);
 
         while (getline(ifs, line)) classes.push_back(line);
 
+        int frameCounter = 0;
         while (!frame.empty()) {
+
+            detectionsOnFrame.clear();
+            detectionsOnProjectionId.clear();
 
             Mat projectedImage;
             int numOfProjections = projector->beginProjection();
@@ -70,6 +83,8 @@
 
                 cout << "Processed " << projectionIndex + 1 << " projections" << endl;
 
+
+
                 // Put efficiency information. The function getPerfProfile returns the overall time for inference(t) and the timings for each of the layers(in layersTimes)
                 vector<double> layersTimes;
                 double freq = getTickFrequency() / 1000;
@@ -85,7 +100,31 @@
                 waitKey(30);
 
             }
+
+            if(outfile){
+                int numOfProjections = projector->beginProjection();
+                int detectionIndex = 0;
+
+                vector<Rect> projectedDetections;
+
+                for(int  projectionIndex = 0; projectionIndex < numOfProjections; ++projectionIndex){
+
+                    for(int i = 0; i < detectionsOnProjectionId[projectionIndex]; ++i){
+
+                        projectedDetections.emplace_back(
+                                projector->sourceCoordinates(frame, detectionsOnFrame[detectionIndex], projectionIndex)
+                                );
+                        ++detectionIndex;
+                    }
+
+                }
+
+                printDetectionsToFile(outfile, frameCounter, projectedDetections);
+
+            }
             videoCapture >> frame;
+            ++frameCounter;
+
 
 
         }
@@ -104,6 +143,8 @@
         const int numDetections = outDetections.size[2];
         const int numClasses = outMasks.size[1];
 
+        detectionsOnProjectionId.push_back(0);
+
         outDetections = outDetections.reshape(1, outDetections.total() / 7);
         for (int i = 0; i < numDetections; ++i) {
             float score = outDetections.at<float>(i, 2);
@@ -120,6 +161,9 @@
                 right = max(0, min(right, frame.cols - 1));
                 bottom = max(0, min(bottom, frame.rows - 1));
                 Rect box = Rect(left, top, right - left + 1, bottom - top + 1);
+
+                detectionsOnFrame.emplace_back(Rect(box));
+                detectionsOnProjectionId.back() = detectionsOnProjectionId.back() + 1;
 
                 // Extract the mask for the object
                 Mat objectMask(outMasks.size[2], outMasks.size[3], CV_32F, outMasks.ptr<float>(i, classId));

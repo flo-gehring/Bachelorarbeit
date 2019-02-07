@@ -74,6 +74,7 @@ public:
     FILE * roiData;
     FILE * debugData;
     double calcWeightedSimiliarity(const Region  * oldRegion, const Region *newRegion, Rect area);
+    FILE * detectorData;
 
 
     // Switch to save Data about the decision making process
@@ -81,14 +82,14 @@ public:
     FILE * analysisDataFile;
     void setupAnalysisOutFile(const char * filename);
 
-    // PANORAMA2CUBEMAP_TRACKING_H
+#undef PANORAMA2CUBEMAP_TRACKING_H
 #ifdef PANORAMA2CUBEMAP_TRACKING_H
     DetectionFromFile darknetDetector;
 #else
     MatDetector darknetDetector;
 #endif
 
-protected:
+// protected:
 
     vector<MetaRegion> calcMetaRegions();
     void interpretMetaRegions(vector<MetaRegion> & mr);
@@ -160,3 +161,6 @@ Mat helperBGRKMean(Mat const &frame, int clusterCount, Mat &labels, Mat &centers
 bool playerInRegionVector(FootballPlayer * fp, vector<Region> const & vr);
 // void optimizeWeightSelection(int rows, int cols, double * weightMatrix, int * selected)
 #endif //PANORAMA2CUBEMAP_TRACKING_H
+
+
+void printDetectionsToFile(FILE * output, int frameNumber, std::vector<Rect> const & detections);
