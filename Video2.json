@@ -1,6 +1,5 @@
 [
   {
-  "detector":"YOLO / Darknet",
     "frame": 0,
     "detections": [
       {

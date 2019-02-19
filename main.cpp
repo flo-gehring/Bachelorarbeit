@@ -45,10 +45,12 @@ int main(int argc, char *argv[]) {
     string prefix = "/home/flo/Videos/";
 
     string videonames[] = {
-           // "Video2.mp4",
-            "TS_10_5.mp4",
-           //"TS_10_5_t01.mp4"
+         //  "/home/flo/Videos/Video2.mp4",
+           "/home/flo/Videos/TS_10_5.mp4",
+           "/home/flo/Videos/TS_10_5_t01.mp4"
     };
+
+
 
 
     /*
@@ -80,21 +82,69 @@ int main(int argc, char *argv[]) {
 
     */
 
+    CubeMapProjector  cubeface = CubeMapProjector();
+
+    for(string const & s : videonames){
+
+        size_t fromSubstring  = s.find_last_of('/');
+        size_t toSubstring = s.find_last_of('.');
+        string name = s.substr(fromSubstring, toSubstring + 1);
+        FILE * detectionFile = fopen((name + ".json").c_str(), "w");
+
+        detectOnVideo(s.c_str(), &cubeface, detectionFile);
+
+
+    }
+
+    return 0;
+
     RegionTracker rt;
     rt.assignmentThreshold = 2.5;
     rt.minDistanceThreshold = 0.3;
     int i = 0;
+
+
+
+
     for(string const & s : videonames){
-        if(strcmp(argv[1], "save") == 0) {
-            rt.enableVideoSave(("0701" + s).c_str());
-            rt.setupAnalysisOutFile(("0701" + s + ".data").c_str());
-        }
+
+
        // rt.setAOIFile(("hmm_" + s + ".csv").c_str());
 
-       rt.darknetDetector.loadAOI("data/AOI/neu_aoi_TS_10_5.data");
-       rt.trackVideo((prefix+s).c_str());
-       cout << s << " finished.." << endl;
-       rt.printTrackingResults("trackingResult.txt");
+
+       cout << "opening " << s << endl;
+        VideoCapture vc(s.c_str());
+
+        if(vc.isOpened()) {
+            cout << "opened.. " << endl;
+        }
+        else{
+            cout << "Failure" << endl;
+        }
+
+        int currentFrame = 0;
+        Mat frame;
+        vc >> frame;
+        rt.debugData = nullptr;
+
+        FILE * outfile = fopen((s.substr(0, s.length() - 4) + ".json").c_str(), "w");
+        while(! frame.empty()){
+            vector<Rect> dets = rt.detectOnFrame(frame);
+            printDetectionsToFile(outfile, currentFrame, dets);
+            ++currentFrame;
+            // imshow("frame", frame);
+            vc >> frame;
+        }
+        fclose(outfile);
+
+
+
+
+       //rt.darknetDetector.loadAOI("data/AOI/neu_aoi_TS_10_5.data");
+
+       // rt.trackVideo((prefix+s).c_str());
+       // cout << s << " finished.." << endl;
+       // rt.printTrackingResults("trackingResult.txt");
     }
 
 

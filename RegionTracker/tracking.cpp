@@ -43,6 +43,8 @@ int RegionTracker::initialize(Mat frame) {
 
     FootballPlayer * newPlayer;
 
+    printDetectionsToFile(detectorData,currentFrame, detectedRects);
+
     for(auto it = detectedRects.begin(); it != detectedRects.end(); ++it){
 
         CV_Assert(it->area() != 0);
@@ -57,6 +59,8 @@ int RegionTracker::initialize(Mat frame) {
         objectCounter++;
 
     }
+
+
 
     pBGSubtractor->apply(frame, foregroundMask);
     for(Region & r: regionsNewFrame){
@@ -83,6 +87,7 @@ bool RegionTracker::update(Mat frame) {
     regionsNewFrame.clear();
 
     vector<Rect> newRects = detectOnFrame(frame);
+    printDetectionsToFile(detectorData,currentFrame, newRects);
 
     for(Rect const & rect: newRects){
 
@@ -1401,4 +1406,24 @@ bool playerInRegionVector(FootballPlayer * fp, vector<Region> const & vr){
     for(Region const & r: vr) if (fp == r.playerInRegion) return true;
 
     return false;
+}
+
+void printDetectionsToFile(FILE *output, int frameNumber, std::vector<Rect> const &detections) {
+
+    if(output) {
+        // Generate List of detections
+        std::string listOfDetections = "";
+        for (Rect const &dets:detections) {
+            listOfDetections.append(
+                    std::string("{ \"x\": " )+  to_string(dets.x) +  std::string(", \"y\":" ) + to_string(dets.y) + std::string(", \"width\": " )+
+                    to_string(dets.width)+ std::string( ", \"height\": ") + to_string( dets.height) +
+                    std::string( "},\n")
+            );
+        }
+        listOfDetections = listOfDetections.substr(0, listOfDetections.length() - 2);
+
+
+        fprintf(output,
+                "{ \"frame\":%i, \n \"detections\": [ %s] }, ", frameNumber, listOfDetections.c_str());
+    }
 }

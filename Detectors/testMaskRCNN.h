@@ -11,6 +11,7 @@
 #include <string>
 #include <iostream>
 #include <vector>
+#include <array>
 
 #include "../OtherTracking/PanoramaTracking.h"
 #include "../OtherTracking/PanoramaTrackingImplementations.h"
@@ -29,7 +30,7 @@
 // Postprocess the neural network's output for each frame
     void postprocess(Mat &frame, const vector<Mat> &outs);
 
-    void detectOnVideo(const char *filePath, Projector *projector);
+    void detectOnVideo(const char *filePath, Projector *projector, FILE * outfile = nullptr);
 
 
 #define PANORAMA2CUBEMAP_TESTMASKRCNN_H
