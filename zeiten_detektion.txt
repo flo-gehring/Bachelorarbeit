@@ -1,0 +1,36 @@
+TS_10_5
+	/home/flo/Videos/TS_10_5.mp4
+	Frames: 391
+	cubemap
+	StartTime: 1550758092
+    finished: 1550758518
+TS_10_5
+	/home/flo/Videos/TS_10_5.mp4
+	StartTime: 1550758518
+	Frames: 391
+	equatorline
+	finished: 1550758998
+TS_10_5_t01
+	/home/flo/Videos/TS_10_5_t01.mp4
+	StartTime: 1550759681
+	 Projector: cubemap
+	 Frames: 218
+	 finished: 1550759918
+TS_10_5_t01
+	/home/flo/Videos/TS_10_5_t01.mp4
+	StartTime: 1550759918
+	 Projector: equator_line
+	 Frames 218
+	 finished: 1550760185
+Video2
+	/home/flo/Videos/Video2.mp4
+	StartTime: 1550760185
+	 Projector: cubemap
+	 Frames: 484
+	 finished: 1550760718
+Video2
+	/home/flo/Videos/Video2.mp4
+	StartTime: 1550760718
+	 Projector: equator_line
+	 Frames: 484
+	 finished: 1550761310

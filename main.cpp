@@ -29,6 +29,8 @@ void show_on_cubefaces(YOLODetector yoloD, char * video_path);
 void save_video_projection(YOLODetector yoloDetector, char* inPath, char* outPath);
 void darknet_predictions(char* video_path);
 
+void createDetectionSourceFile(const char * videoPath, FILE * outfile, Projector * projector, MatDetector * darknetDetector );
+
 
 int main(int argc, char *argv[]) {
     if (!(argc == 6 || argc == 7))
@@ -45,10 +47,53 @@ int main(int argc, char *argv[]) {
     string prefix = "/home/flo/Videos/";
 
     string videonames[] = {
-         //  "/home/flo/Videos/Video2.mp4",
+            "/home/flo/Videos/Video2.mp4",
            "/home/flo/Videos/TS_10_5.mp4",
            "/home/flo/Videos/TS_10_5_t01.mp4"
     };
+
+    string vid[] = {
+
+            // "TS_10_5",
+            "TS_10_5_t01",
+            "Video2"
+    };
+
+    Projector * projectors[] = {
+            new EquatorLine(cv::Size(3840, 1920)),
+            new CubeMapProjector()
+
+    };
+    string projectorNames[] = {
+            "equator_line",
+            "cubemap"
+
+    };
+
+    FILE * detectionOutFile;
+    string filename;
+    MatDetector darknetDetector;
+
+    MatDetector * ptr_darknetDetector = & darknetDetector;
+    for(string const & videoname : vid){
+        filename = prefix + videoname + ".mp4";
+
+        for(int i = 1; i >= 0; --i){
+            cout << videoname <<  endl << "\t" << filename << endl << "\t" << "StartTime: " << time(0) << endl;
+            cout << "\t Projector: " << projectorNames[i] << endl;
+            detectionOutFile = fopen(("darknet-yolo_" + videoname + "_"+ projectorNames[i] + ".json").c_str(), "w");
+
+
+            createDetectionSourceFile(filename.c_str(), detectionOutFile, projectors[i],  ptr_darknetDetector);
+
+            fclose(detectionOutFile);
+
+            cout  << endl << "\t finished: " << time(0) << endl;
+
+        }
+    }
+
+    for(Projector * p:projectors) delete p;
 
 
 
@@ -92,8 +137,6 @@ int main(int argc, char *argv[]) {
         FILE * detectionFile = fopen((name + ".json").c_str(), "w");
 
         detectOnVideo(s.c_str(), &cubeface, detectionFile);
-
-
     }
 
     return 0;
@@ -315,6 +358,69 @@ void darknet_predictions(char * video_path){
     }
     return;
 }
+
+void createDetectionSourceFile(const char * videoPath, FILE * outfile, Projector * projector, MatDetector * darknetDetector){
+
+    VideoCapture videoCapture(videoPath);
+    Mat currentFrame;
+
+    videoCapture >> currentFrame;
+    Mat projectedFrame;
+
+    vector<Rect> boundingBoxes;
+    vector<float> confScores;
+
+    Rect sourceCoords;
+    int frameCounter = -1;
+    fprintf(outfile, "[ \n");
+    while(! currentFrame.empty()){
+
+        int numOfProjections = projector->beginProjection();
+        boundingBoxes.clear();
+        confScores.clear();
+
+        for(int projectionIndex = 0; projectionIndex < numOfProjections; ++projectionIndex){
+            projector->project(currentFrame, projectedFrame);
+
+            darknetDetector->detect_and_display(projectedFrame);
+
+            for(AbsoluteBoundingBoxes const & abb: darknetDetector->found) {
+                sourceCoords = projector->sourceCoordinates(currentFrame, abb.rect, projectionIndex);
+                boundingBoxes.emplace_back(Rect(sourceCoords));
+                confScores.emplace_back(abb.prob);
+            }
+        }
+        frameCounter++;
+
+        Rect currentBB;
+
+        string listOfDetections = "";
+        for(int i = 0; i < confScores.size(); ++i){
+            // Generate List of detections
+
+             currentBB = boundingBoxes[i];
+
+            listOfDetections.append(
+                        std::string("{ \"x\": " )+  to_string(currentBB.x) +  std::string(", \"y\":" ) + to_string(currentBB.y) + std::string(", \"width\": " )+
+                        to_string(currentBB.width)+ std::string( ", \"height\": ") + to_string( currentBB.height) + + ", \"confidence\": " + to_string(confScores[i]) +
+                        std::string( "},\n")
+                );
+            }
+        listOfDetections = listOfDetections.substr(0, listOfDetections.length() - 2);
+
+
+        fprintf(outfile,
+                    "{ \"frame\":%i, \n \"detections\": [ %s] }, ", frameCounter, listOfDetections.c_str());
+        videoCapture >> currentFrame;
+        cout << frameCounter << " ";
+        cout << flush;
+        }
+
+    fprintf(outfile, "]");
+
+
+    }
+
 
 void save_video_projection(YOLODetector yoloDetector, char* inPath, char* outPath){
     Mat er_projection, resized_er;
