@@ -141,9 +141,6 @@ bool PanoramaTracking::update() {
             else{
                 std::cout << "Lost sight of Object!" << std::endl;
             }
-
-
-
         }
 
         for(Rect const & newDetection : detectedRects){
@@ -157,8 +154,6 @@ bool PanoramaTracking::update() {
             objectIdentifier[newTracker] = id;
             panoramaAOI.emplace_back(std::make_pair(Rect(panoramaPostion), newTracker));
         }
-
-
 
     }
     ++frameCounter;
