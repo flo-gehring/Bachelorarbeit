@@ -19,7 +19,6 @@
 #include "OtherTracking/PanoramaTracking.h"
 #include "OtherTracking/PanoramaTrackingImplementations.h"
 
-
 using namespace cv;
 using namespace dnn;
 using namespace std;
@@ -30,6 +29,43 @@ void save_video_projection(YOLODetector yoloDetector, char* inPath, char* outPat
 void darknet_predictions(char* video_path);
 
 void createDetectionSourceFile(const char * videoPath, FILE * outfile, Projector * projector, MatDetector * darknetDetector );
+
+void createImageDir(const char * videoPath , Projector * projector, string videoName, string projectorName){
+    VideoCapture videoCapture(videoPath);
+    Mat currentFrame;
+
+    videoCapture >> currentFrame;
+    Mat projectedFrame;
+
+    string dirName = videoName + "/"+ projectorName;
+
+    system(("mkdir " + videoName).c_str());
+    system(("mkdir " + dirName).c_str());
+
+
+
+    int frameCounter = -1;
+    while(! currentFrame.empty()){
+        ++frameCounter;
+        int numOfProjections = projector->beginProjection();
+
+        string frameDir = dirName + "/" + to_string(frameCounter);
+
+        system(("mkdir " + frameDir).c_str());
+
+        for(int projectionIndex = 0; projectionIndex < numOfProjections; ++projectionIndex){
+            projector->project(currentFrame, projectedFrame);
+            cout << frameDir << endl;
+
+            projector->project(currentFrame, projectedFrame);
+            imwrite((frameDir + "/" + to_string(projectionIndex) + ".jpeg").c_str(), projectedFrame);
+
+        }
+        videoCapture >> currentFrame;
+        cout << frameCounter << flush;
+
+    }
+}
 
 
 int main(int argc, char *argv[]) {
@@ -69,6 +105,13 @@ int main(int argc, char *argv[]) {
             "cubemap"
 
     };
+
+    createImageDir(videonames[2].c_str() , projectors[1], "TS_10_5_t01", "cubemap");
+    return 0;
+
+
+
+
 
     FILE * detectionOutFile;
     string filename;
@@ -356,7 +399,6 @@ void darknet_predictions(char * video_path){
 
         }
     }
-    return;
 }
 
 void createDetectionSourceFile(const char * videoPath, FILE * outfile, Projector * projector, MatDetector * darknetDetector){
