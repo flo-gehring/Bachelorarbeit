@@ -13,11 +13,9 @@
 
     vector<Rect> detectionsOnFrame;
     vector<int> detectionsOnProjectionId;
+    vector<float> confScores;
 
-
-
-
-void detectOnVideo(const char *filePath, Projector *projector, FILE * outfile) {
+void detectOnVideo(const char *filePath, Projector *projector, FILE * outfile, int skipToFrame) {
 
         classes.clear();
         colors.clear();
@@ -55,10 +53,16 @@ void detectOnVideo(const char *filePath, Projector *projector, FILE * outfile) {
         while (getline(ifs, line)) classes.push_back(line);
 
         int frameCounter = 0;
+
+        for(; frameCounter < skipToFrame  && ! frame.empty(); ++frameCounter){
+            videoCapture >> frame;
+        }
+
         while (!frame.empty()) {
 
             detectionsOnFrame.clear();
             detectionsOnProjectionId.clear();
+            confScores.clear();
 
             Mat projectedImage;
             int numOfProjections = projector->beginProjection();
@@ -119,7 +123,27 @@ void detectOnVideo(const char *filePath, Projector *projector, FILE * outfile) {
 
                 }
 
-                printDetectionsToFile(outfile, frameCounter, projectedDetections);
+                Rect currentBB;
+                string listOfDetections = "";
+                for(int i = 0; i < confScores.size(); ++i){
+                        // Generate List of detections
+
+                        currentBB = projectedDetections[i];
+
+                        listOfDetections.append(
+                                std::string("{ \"x\": " )+  to_string(currentBB.x) +  std::string(", \"y\":" ) + to_string(currentBB.y) + std::string(", \"width\": " )+
+                                to_string(currentBB.width)+ std::string( ", \"height\": ") + to_string( currentBB.height) + + ", \"confidence\": " + to_string(confScores[i]) +
+                                std::string( "},\n")
+                        );
+                    }
+                    listOfDetections = listOfDetections.substr(0, listOfDetections.length() - 2);
+
+
+                    fprintf(outfile,
+                            "{ \"frame\":%i, \n \"detections\": [ %s] }, ", frameCounter, listOfDetections.c_str());
+
+
+                // printDetectionsToFile(outfile, frameCounter, projectedDetections);
 
             }
             videoCapture >> frame;
@@ -148,7 +172,7 @@ void detectOnVideo(const char *filePath, Projector *projector, FILE * outfile) {
         outDetections = outDetections.reshape(1, outDetections.total() / 7);
         for (int i = 0; i < numDetections; ++i) {
             float score = outDetections.at<float>(i, 2);
-            if (score > confThreshold) {
+            if (score > 0) {
                 // Extract the bounding box
                 int classId = static_cast<int>(outDetections.at<float>(i, 1));
                 int left = static_cast<int>(frame.cols * outDetections.at<float>(i, 3));
@@ -162,14 +186,17 @@ void detectOnVideo(const char *filePath, Projector *projector, FILE * outfile) {
                 bottom = max(0, min(bottom, frame.rows - 1));
                 Rect box = Rect(left, top, right - left + 1, bottom - top + 1);
 
-                detectionsOnFrame.emplace_back(Rect(box));
-                detectionsOnProjectionId.back() = detectionsOnProjectionId.back() + 1;
+                if(classId == 0){
+                    detectionsOnFrame.emplace_back(Rect(box));
+                    detectionsOnProjectionId.back() = detectionsOnProjectionId.back() + 1;
+                    confScores.push_back(score);
 
-                // Extract the mask for the object
-                Mat objectMask(outMasks.size[2], outMasks.size[3], CV_32F, outMasks.ptr<float>(i, classId));
+                    // Extract the mask for the object
+                    Mat objectMask(outMasks.size[2], outMasks.size[3], CV_32F, outMasks.ptr<float>(i, classId));
 
-                // Draw bounding box, colorize and show the mask on the image
-                drawBox(frame, classId, score, box, objectMask);
+                    // Draw bounding box, colorize and show the mask on the image
+                    drawBox(frame, classId, score, box, objectMask);
+                }
 
             }
         }

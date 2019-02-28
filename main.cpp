@@ -84,8 +84,9 @@ int main(int argc, char *argv[]) {
 
     string videonames[] = {
             "/home/flo/Videos/Video2.mp4",
-           "/home/flo/Videos/TS_10_5.mp4",
-           "/home/flo/Videos/TS_10_5_t01.mp4"
+            "/home/flo/Videos/TS_10_5_t01.mp4",
+           "/home/flo/Videos/TS_10_5.mp4"
+
     };
 
     string vid[] = {
@@ -106,12 +107,8 @@ int main(int argc, char *argv[]) {
 
     };
 
-    createImageDir(videonames[2].c_str() , projectors[1], "TS_10_5_t01", "cubemap");
-    return 0;
-
-
-
-
+    // createImageDir(videonames[2].c_str() , projectors[1], "TS_10_5_t01", "cubemap");
+    // return 0;
 
     FILE * detectionOutFile;
     string filename;
@@ -124,10 +121,10 @@ int main(int argc, char *argv[]) {
         for(int i = 1; i >= 0; --i){
             cout << videoname <<  endl << "\t" << filename << endl << "\t" << "StartTime: " << time(0) << endl;
             cout << "\t Projector: " << projectorNames[i] << endl;
-            detectionOutFile = fopen(("darknet-yolo_" + videoname + "_"+ projectorNames[i] + ".json").c_str(), "w");
+            detectionOutFile = fopen(("test_maskrcnn_" + videoname + "_"+ projectorNames[i] + ".json").c_str(), "w");
 
-
-            createDetectionSourceFile(filename.c_str(), detectionOutFile, projectors[i],  ptr_darknetDetector);
+            detectOnVideo(filename.c_str(), projectors[i], detectionOutFile);
+            // createDetectionSourceFile(filename.c_str(), detectionOutFile, projectors[i],  ptr_darknetDetector);
 
             fclose(detectionOutFile);
 

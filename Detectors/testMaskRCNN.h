@@ -30,7 +30,7 @@
 // Postprocess the neural network's output for each frame
     void postprocess(Mat &frame, const vector<Mat> &outs);
 
-    void detectOnVideo(const char *filePath, Projector *projector, FILE * outfile = nullptr);
+    void detectOnVideo(const char *filePath, Projector *projector, FILE * outfile = nullptr, int skipToFrame=0);
 
 
 #define PANORAMA2CUBEMAP_TESTMASKRCNN_H
