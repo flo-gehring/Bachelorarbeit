@@ -89,6 +89,26 @@ int main(int argc, char *argv[]) {
 
     };
 
+    VideoCapture t(videonames[2]);
+
+    Mat t_frame, projected_t_frame, same_video_excerpt;
+
+    t >> t_frame;
+
+    CubeMapProjector cmp;
+
+   imwrite("whole_frame.png", t_frame);
+   for(int i = 0; i < 6; ++i){
+        cmp.project(t_frame, i, projected_t_frame);
+        imwrite((to_string(i) + "_cubeface.png").c_str(), projected_t_frame);
+
+        same_video_excerpt = t_frame(cmp.sourceCoordinates(t_frame, Rect(0, 0, 512, 512), i));
+        imwrite((to_string(i) + "_excerpt.png").c_str(), same_video_excerpt);
+
+
+
+    }
+    return 0;
     string vid[] = {
 
             // "TS_10_5",
@@ -97,22 +117,28 @@ int main(int argc, char *argv[]) {
     };
 
     Projector * projectors[] = {
+            new EquatorLine(cv::Size(3840, 1920), 3840, 1920),
             new EquatorLine(cv::Size(3840, 1920)),
             new CubeMapProjector()
 
     };
     string projectorNames[] = {
+            "whole_frame"
             "equator_line",
             "cubemap"
 
     };
+    MatDetector darknetDetector;
+
+    FILE * outfile = fopen("ts_10_5_yolo_whole_frame.json", "w");
+
+    createDetectionSourceFile("/home/flo/Videos/TS_10_5.mp4",outfile , projectors[0], &darknetDetector);
 
     // createImageDir(videonames[2].c_str() , projectors[1], "TS_10_5_t01", "cubemap");
     // return 0;
 
     FILE * detectionOutFile;
     string filename;
-    MatDetector darknetDetector;
 
     MatDetector * ptr_darknetDetector = & darknetDetector;
     for(string const & videoname : vid){
@@ -124,7 +150,6 @@ int main(int argc, char *argv[]) {
             detectionOutFile = fopen(("test_maskrcnn_" + videoname + "_"+ projectorNames[i] + ".json").c_str(), "w");
 
             detectOnVideo(filename.c_str(), projectors[i], detectionOutFile);
-            // createDetectionSourceFile(filename.c_str(), detectionOutFile, projectors[i],  ptr_darknetDetector);
 
             fclose(detectionOutFile);
 
@@ -450,12 +475,15 @@ void createDetectionSourceFile(const char * videoPath, FILE * outfile, Projector
 
         fprintf(outfile,
                     "{ \"frame\":%i, \n \"detections\": [ %s] }, ", frameCounter, listOfDetections.c_str());
+
         videoCapture >> currentFrame;
         cout << frameCounter << " ";
         cout << flush;
         }
 
     fprintf(outfile, "]");
+    fflush(outfile);
+    fclose(outfile);
 
 
     }

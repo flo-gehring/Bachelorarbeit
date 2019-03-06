@@ -15,6 +15,107 @@
     vector<int> detectionsOnProjectionId;
     vector<float> confScores;
 
+
+    void detectExperiment(const char * filePath,string outfilepath){
+
+
+        classes.clear();
+        colors.clear();
+
+        colors = {Scalar(0, 0, 255), Scalar(0, 255, 0), Scalar(255, 255, 255), Scalar(255, 102, 255)};
+        confThreshold = 0.5;
+        maskThreshold = 0.8;
+
+        char *windowName = "MaskRCNN";
+        namedWindow(windowName);
+
+
+
+        CubeMapProjector cubemapProjector = CubeMapProjector();
+
+
+        for(int i = 2; i < 4; ++i){
+
+            FILE * outfile = fopen( (to_string(i) + "_" + outfilepath).c_str(), "w");
+            VideoCapture videoCapture(filePath);
+
+            Mat frame, blob, projectedImage;
+            videoCapture >> frame;
+
+            std::string directory = "./Detectors/mask_rcnn_inception_v2_coco_2018_01_28/";
+
+            // Load names of classes
+            std::string classesFile = directory + "ms_coco.names";
+            std::ifstream ifs(classesFile.c_str());
+            std::string line;
+
+            vector<string> classes;
+
+            // Give the configuration and weight files for the model
+            String textGraph = directory + "mask_rcnn_inception_v2_coco_2018__01_28.pbtxt";
+            String modelWeights = directory + "frozen_inference_graph.pb";
+
+            // Load the network
+            Net net = readNetFromTensorflow(modelWeights, textGraph);
+            net.setPreferableBackend(DNN_BACKEND_OPENCV);
+            net.setPreferableTarget(DNN_TARGET_CPU);
+
+            while (getline(ifs, line)) classes.push_back(line);
+
+            int frameCounter = 0;
+
+            while(! frame.empty()){
+                detectionsOnFrame.clear();
+                confScores.clear();
+                cubemapProjector.project(frame, i, projectedImage);
+
+                blobFromImage(projectedImage, blob, 1.0, Size(projectedImage.cols, projectedImage.rows), Scalar(), true, false);
+                net.setInput(blob);
+
+                // Runs the forward pass to get output from the output layers
+                std::vector<String> outNames(2);
+                outNames[0] = "detection_out_final";
+                outNames[1] = "detection_masks";
+                vector<Mat> outs;
+                net.forward(outs, outNames);
+
+                // Extract the bounding box and mask for each of the detected objects
+                postprocess(projectedImage, outs);
+
+                vector<Rect> projectedDetections;
+                for(Rect const & r: detectionsOnFrame){
+                    projectedDetections.emplace_back(
+                            cubemapProjector.sourceCoordinates(frame, r, i)
+                            );
+                }
+                string listOfDetections = "";
+                Rect currentBB;
+                for(int i = 0; i < confScores.size(); ++i){
+                    // Generate List of detections
+
+                    currentBB = projectedDetections[i];
+
+                    listOfDetections.append(
+                            std::string("{ \"x\": " )+  to_string(currentBB.x) +  std::string(", \"y\":" ) + to_string(currentBB.y) + std::string(", \"width\": " )+
+                            to_string(currentBB.width)+ std::string( ", \"height\": ") + to_string( currentBB.height) + + ", \"confidence\": " + to_string(confScores[i]) +
+                            std::string( "},\n")
+                    );
+                }
+                listOfDetections = listOfDetections.substr(0, listOfDetections.length() - 2);
+
+
+                fprintf(outfile,
+                        "{ \"frame\":%i, \n \"detections\": [ %s] }, ", frameCounter, listOfDetections.c_str());
+
+                videoCapture >> frame;
+                frameCounter++;
+                cout << frameCounter << " " << flush;
+
+
+            }
+        }
+
+    }
 void detectOnVideo(const char *filePath, Projector *projector, FILE * outfile, int skipToFrame) {
 
         classes.clear();

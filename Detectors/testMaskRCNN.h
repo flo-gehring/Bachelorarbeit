@@ -32,6 +32,7 @@
 
     void detectOnVideo(const char *filePath, Projector *projector, FILE * outfile = nullptr, int skipToFrame=0);
 
+    void detectExperiment(const char * filePath, string outfilepath);
 
 #define PANORAMA2CUBEMAP_TESTMASKRCNN_H
 
