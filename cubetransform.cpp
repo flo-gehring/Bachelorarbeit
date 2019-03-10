@@ -107,15 +107,13 @@ void getWorldCoords(int i, int j, int face, int edge, float * x, float * y, floa
     float b =  (2 * float(j) / float(edge)) -1;
 
 
-
-
     if(face == 0){
-        *x  = 1;
+        *x  = -1;
         *y =  -a;
         *z = -b;
     }
     else if(face == 1){
-        *x = -a;
+        *x = a;
         *y = -1.0f;
         *z = -b;
     }
@@ -129,7 +127,7 @@ void getWorldCoords(int i, int j, int face, int edge, float * x, float * y, floa
         * y = 1.0f;
         * z = -b;
 
-    } // Forget about to pand bottom right now
+    } // Forget about top and bottom right now
 }
 
 void getCubeSide(Mat imgIn, Mat & out, int edgeLenght, int faceSide){
@@ -158,15 +156,14 @@ void getCubeSide(Mat imgIn, Mat & out, int edgeLenght, int faceSide){
             float uf = (theta + M_PI) / M_PI * height;
             float vf = (M_PI_2 - phi) / M_PI * height;
 
-            xMap.at<float>(i, j) = uf;
-            yMap.at<float>(i, j) = vf;
+            xMap.at<float>(j, i) = uf;
+            yMap.at<float>(j, i) = vf;
 
         }
     }
 
     remap(imgIn, out, xMap, yMap,
           INTER_LINEAR, BORDER_CONSTANT, Scalar(0, 0, 0));
-    rotate(out, out, ROTATE_90_CLOCKWISE);
 }
 
 
