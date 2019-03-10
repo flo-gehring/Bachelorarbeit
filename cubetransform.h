@@ -27,6 +27,8 @@ void mapRectangleToPanorama(Mat const & inFrame,  int faceId,  int width,  int h
 
 
 void cubeNet(Mat const & panorama, Mat& cubemap);
+void getCubeSide(Mat imgIn, Mat & out, int edgeLenght, int faceSide);
+void getWorldCoords(int i, int j, int face, int edge, float * x, float * y, float * z);
 
 
 #endif //PANORAMA2CUBEMAP_CUBETRANSFORM_H

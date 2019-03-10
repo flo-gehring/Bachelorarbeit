@@ -100,6 +100,86 @@ void mapRectangleToPanorama(Mat const & inFrame,  int faceId,  int width,  int h
 
 }
 
+void getWorldCoords(int i, int j, int face, int edge, float * x, float * y, float * z){
+
+    float a = (2 * float(i) / float(edge)) -1 ;
+
+    float b =  (2 * float(j) / float(edge)) -1;
+
+
+
+
+    if(face == 0){
+        *x  = -1;
+        *y =  -a;
+        *z = -b;
+    }
+    else if(face == 1){
+        *x = a;
+        *y = -1.0f;
+        *z = -b;
+    }
+    else if(face == 2){
+        *x = 1.0f;
+        *y = a;
+        *z = -b;
+    }
+    else if (face == 3){
+        * x = -a;
+        * y = 1.0f;
+        * z = -b;
+
+    } // Forget about to pand bottom right now
+}
+
+void getCubeSide(Mat imgIn, Mat & out, int edgeLenght, int faceSide){
+
+
+
+    float x;
+    float  y;
+    float  z;
+
+    int height = imgIn.size().height;
+    int width = imgIn.size().width;
+
+    Mat xMap(edgeLenght, edgeLenght, CV_32F);
+    Mat yMap(edgeLenght, edgeLenght, CV_32F);
+    for(int i = 0; i < edgeLenght; ++i){
+        for (int j = 0; j < edgeLenght; ++j){
+
+            getWorldCoords(i, j, faceSide, edgeLenght, &x, &y, &z);
+
+            float theta = atan2(y, x);
+            float r = hypot(x,y);
+            float phi = atan2(z, r);
+            // float uf = (2.0 * imgIn.size().width * (theta + M_PI) / M_PI);
+            // float vf = (2.0 * imgIn.size().height * (M_PI / 2 - phi) / M_PI);
+            float uf = (theta + M_PI) / M_PI * height;
+            float vf = (M_PI_2 - phi) / M_PI * height;
+
+
+
+
+
+            xMap.at<float>(i, j) = uf;
+            yMap.at<float>(i, j) = vf;
+
+        }
+    }
+
+    remap(imgIn, out, xMap, yMap,
+          INTER_LINEAR, BORDER_CONSTANT, Scalar(0, 0, 0));
+}
+
+
+
+
+
+
+
+
+
 void getPanoramaCoords( Mat const & in, int faceId,  int width,  int height,
                                int x, int y,
                                float * u_ptr, float* v_ptr){
