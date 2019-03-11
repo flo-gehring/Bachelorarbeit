@@ -31,8 +31,8 @@ Rect CubeMapProjector::sourceCoordinates(Mat const &input, Rect const &coordinat
 }
 
 CubeMapProjector::CubeMapProjector() {
-    projectionWidth = 500;
-    projectionHeight = 500;
+    projectionWidth = 608;
+    projectionHeight = 608;
 }
 
 std::vector<Rect> YOLOWrapper::detect(Mat const &input) {
@@ -177,4 +177,38 @@ Rect EquatorLine::sourceCoordinates(Mat const &input, Rect const &coordinates, i
                     projectionRect.y + coordinates.y,
                     coordinates.width,
                     coordinates.height);
+}
+
+CleanCubeMap::CleanCubeMap() {
+    currentProjectionId = 0;
+
+    maxProjection = 4;
+}
+
+int CleanCubeMap::beginProjection() {
+
+    currentProjectionId = 0;
+    return maxProjection;
+}
+
+int CleanCubeMap::project(Mat const &input, Mat &output) {
+
+    getCubeSide(input, output, 608, currentProjectionId);
+    ++currentProjectionId;
+    return currentProjectionId;
+}
+
+void CleanCubeMap::project(Mat const &input, int projectionId, Mat &output) {
+    getCubeSide(input, output, 608, projectionId);
+}
+
+Rect CleanCubeMap::sourceCoordinates(Mat const &input, Rect const &coordinates, int projectionNumber) {
+    Size inputSize = input.size();
+    float xtl, ytl, xbr, ybr;
+    panoramaCoords(inputSize, projectionNumber, coordinates.x, coordinates.y, 608,  &xtl, &ytl);
+    panoramaCoords(inputSize, projectionNumber, coordinates.x + coordinates.width, coordinates.y + coordinates.height,
+            608,  &xbr, &ybr);
+
+
+    return cv::Rect(int(xtl), int(ytl),int(xbr - xtl), int(ybr - ytl));
 }

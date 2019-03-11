@@ -10,6 +10,24 @@
 
 
 
+class CleanCubeMap: public Projector{
+
+public:
+    CleanCubeMap();
+    int project(Mat const &input, Mat & output) override;
+    void project(Mat const & inpit, int projectionId, Mat & output);
+    Rect sourceCoordinates(Mat const & input, Rect const & coordinates, int projectionNumber);
+    int beginProjection() override;
+
+private:
+    int currentProjection;
+    int maxProjection;
+
+
+
+};
+
+
 class EquatorLine : public Projector{
 public:
     EquatorLine(Size const & inputSize, int projectionWidth = 512, int projectionHeight = 512);
