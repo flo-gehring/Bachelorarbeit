@@ -100,9 +100,57 @@ void mapRectangleToPanorama(Mat const & inFrame,  int faceId,  int width,  int h
 
 }
 
-void getWorldCoords(int i, int j, int face, int edge, float * x, float * y, float * z){
 
-    float a = (2 * float(i) / float(edge)) -1 ;
+/**
+ *
+ * @param matSize
+ * @param face
+ * @param i
+ * @param j
+ * @param edgeLength
+ * @param u
+ * @param v
+ */
+inline void panoramaCoords(Size matSize, int face, int i, int j, int edgeLength, float * u, float * v){
+
+    float x;
+    float  y;
+    float  z;
+
+    int height = matSize.height;
+    int width = matSize.width;
+
+    Mat xMap(edgeLength, edgeLength, CV_32F);
+    Mat yMap(edgeLength, edgeLength, CV_32F);
+
+    float phi, r, theta;
+
+
+    getWorldCoords(i, j, face, edgeLength, &x, &y, &z);
+
+    phi = atan2(y, x);
+    r = hypot(x,y);
+    theta =  M_PI_2 - atan2(z, r);
+
+    // uf = (phi + M_PI) / M_PI * height;
+    *u  = ((phi + M_PI) / (M_PI * 2)) * width;
+    *v  = (theta) / ( M_PI) * height;
+}
+
+/**
+ * Get the Coordinates in a cartesian coordinate System  for the Position (i,j) on
+ * Cubeface face.
+ * @param i
+ * @param j
+ * @param face
+ * @param edge
+ * @param x
+ * @param y
+ * @param z
+ */
+inline void getWorldCoords(int i, int j, int face, int edge, float * x, float * y, float * z){
+
+    float a = (2 * float(i) / float(edge)) -1;
 
     float b =  (2 * float(j) / float(edge)) -1;
 
@@ -127,37 +175,42 @@ void getWorldCoords(int i, int j, int face, int edge, float * x, float * y, floa
         * y = 1.0f;
         * z = -b;
 
-    } // Forget about top and bottom right now
+    } else if (face==4) { // top
+        *x =  b;
+        *y = a;
+        *z = 1.0f;
+    } else if (face==5) { // bottom
+        *x = -b;
+        *y= a;
+        *z = -1.0f;
+    }
 }
 
-void getCubeSide(Mat imgIn, Mat & out, int edgeLenght, int faceSide){
+float get_max(float x, float y){
+    if(x > y) return x;
+    else return y;
+}
+float get_min(float x, float y){
+    if(x < y) return x;
+    return y;
+
+}
+void getCubeSide(Mat const &  imgIn, Mat & out, int edgeLength, int faceSide){
+
+    Mat xMap(edgeLength, edgeLength, CV_32F);
+    Mat yMap(edgeLength, edgeLength, CV_32F);
+
+    float uf, vf;
+
+    for(int i = 0; i < edgeLength; ++i){
+        for (int j = 0; j < edgeLength; ++j){
 
 
-
-    float x;
-    float  y;
-    float  z;
-
-    int height = imgIn.size().height;
-    int width = imgIn.size().width;
-
-    Mat xMap(edgeLenght, edgeLenght, CV_32F);
-    Mat yMap(edgeLenght, edgeLenght, CV_32F);
-    for(int i = 0; i < edgeLenght; ++i){
-        for (int j = 0; j < edgeLenght; ++j){
-
-            getWorldCoords(i, j, faceSide, edgeLenght, &x, &y, &z);
-
-            float theta = atan2(y, x);
-            float r = hypot(x,y);
-            float phi = atan2(z, r);
-            // float uf = (2.0 * imgIn.size().width * (theta + M_PI) / M_PI);
-            // float vf = (2.0 * imgIn.size().height * (M_PI / 2 - phi) / M_PI);
-            float uf = (theta + M_PI) / M_PI * height;
-            float vf = (M_PI_2 - phi) / M_PI * height;
+            panoramaCoords(imgIn.size(), faceSide, i, j, edgeLength, &uf, &vf);
 
             xMap.at<float>(j, i) = uf;
             yMap.at<float>(j, i) = vf;
+
 
         }
     }

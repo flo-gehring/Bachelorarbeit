@@ -90,6 +90,8 @@ int demo_done;
 int demo_total;
 double demo_time;
 
+void printFound(FILE* outfile, int frameNumber);
+
 
 virtual void detect_and_display(cv::Mat input_mat);
 void *detect_in_thread(void *ptr);
@@ -121,6 +123,7 @@ public:
     std::vector<AbsoluteBoundingBoxes> found;
 
     void loadAOI(std::string filename);
+
 
 
 private:

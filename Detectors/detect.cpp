@@ -202,6 +202,7 @@ void  MatDetector::print_detections(image im, detection *dets, int num){
         }
     }
 
+
     /*
      * Perform Non Maximum supression on the Bounding Boxes
      * TODO: Replace class_name placeholder with correct Class
@@ -220,6 +221,32 @@ void  MatDetector::print_detections(image im, detection *dets, int num){
 
 
 }
+
+
+void MatDetector::printFound(FILE* output, int frameNumber){
+
+    if(output) {
+        std::string listOfDetections = "";
+
+        for (AbsoluteBoundingBoxes abb: found) {
+
+            // Generate List of detections
+
+            listOfDetections.append(
+                    std::string("{ \"x\": ") + std::to_string(abb.rect.x) + std::string(", \"y\":") + std::to_string(abb.rect.y) +
+                    std::string(", \"width\": ") +
+                    std::to_string(abb.rect.width) + std::string(", \"height\": ") + std::to_string(abb.rect.height) +
+                    ", \"confidence\": " + std::to_string(abb.prob) + std::string("},\n")
+            );
+        }
+        listOfDetections = listOfDetections.substr(0, listOfDetections.length() - 2);
+
+        fprintf(output,
+                        "{ \"frame\":%i, \n \"detections\": [ %s] }, ", frameNumber, listOfDetections.c_str());
+    }
+}
+
+
 
 void MatDetector::remember_network(network *net)
 {

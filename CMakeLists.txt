@@ -9,6 +9,7 @@ include_directories(${OpenCV_INCLUDE_DIRS})
 include_directories("${PROJECT_BINARY_DIR}")
 #include_directories(-L/usr/local/lib -lxml2 -lz -l)
 link_directories(/home/flo/Workspace/darknet)
+link_directories(/usr/local/cuda/lib64)
 
 
 

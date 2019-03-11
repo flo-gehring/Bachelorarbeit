@@ -158,8 +158,6 @@ bool PanoramaTracking::update() {
             panoramaAOI.emplace_back(std::make_pair(Rect(panoramaPostion), newTracker));
         }
 
-
-
     }
     ++frameCounter;
     
