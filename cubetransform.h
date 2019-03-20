@@ -29,7 +29,7 @@ void mapRectangleToPanorama(Mat const & inFrame,  int faceId,  int width,  int h
 void cubeNet(Mat const & panorama, Mat& cubemap);
 
 
-// CLeaner Projection, no dirty tricks. This is as its explained in the Thesis.
+// CLeaner Projection, no dirty tricks. This is as it's explained in the Thesis.
 void panoramaCoords(Size matSize, int face, int i, int j, int edgeLength, float * u, float * v);
 void getWorldCoords(int i, int j, int face, int edge, float * x, float * y, float * z) ;
 void getCubeSide(Mat const & imgIn, Mat & out, int edgeLength, int faceSide);

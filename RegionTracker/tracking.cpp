@@ -43,7 +43,7 @@ int RegionTracker::initialize(Mat frame) {
 
     FootballPlayer * newPlayer;
 
-    printDetectionsToFile(detectorData,currentFrame, detectedRects);
+    // printDetectionsToFile(detectorData,currentFrame, detectedRects);
 
     for(auto it = detectedRects.begin(); it != detectedRects.end(); ++it){
 
@@ -519,7 +519,7 @@ double RegionTracker::calcWeightedSimiliarity(const Region  * oldRegion, const R
 
         similarityHistogramm = compareHist(hist1, hist2, CV_COMP_CORREL);
         similarityHistogramm = (similarityHistogramm / 2) + 0.5; // Map [-1,1] to [0,1]
-        similarityHistogramm = 0;
+        //similarityHistogramm = 0;
 
         // Color
         // CIE94 Formula. If the difference has a value greater than 100, similarityColor turns negative.
@@ -1080,6 +1080,7 @@ RegionTracker::RegionTracker() {
     analysisData = false;
     analysisDataFile = nullptr;
     pBGSubtractor = createBackgroundSubtractorMOG2(); //MOG2 approach
+    detectorData = nullptr;
 
 }
 
@@ -1199,6 +1200,8 @@ void RegionTracker::printTrackingResults(const char * filePath) {
         }
 
     }
+    fflush(outFile);
+    fclose(outFile);
 }
 
 /*

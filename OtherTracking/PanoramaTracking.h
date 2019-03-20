@@ -20,8 +20,19 @@
 
 using namespace cv;
 
+const static  char * TRACKER_NAMES[7] = {
+
+        "Boosting",
+        "KCF",
+        "MedianFlow",
+        "MIL",
+        "MOSSE",
+        "TLD"
+};
+
 class Projector{
 public:
+
 
     /*
      * Call this Function before beginning to project a new Frame. It will return the number of total Projections
@@ -66,6 +77,9 @@ class PanoramaTracking {
 public:
 
 
+
+    FILE * trackingResult;
+
     PanoramaTracking(DetectorWrapper * detector, const char * tracker, Projector * projector);
     DetectorWrapper * detector;
     const char * trackerType;
@@ -88,12 +102,14 @@ protected:
     std::vector<Ptr<Tracker>> trackers;
     std::map<int, std::vector<Ptr<Tracker>>> projectionIdMapping;
 
-    std::map<Ptr<Tracker>, std::string> objectIdentifier;
+    std::map<Ptr<Tracker>, int> objectIdentifier;
     std::vector<std::tuple<Rect, Ptr<Tracker>>> panoramaAOI;
 
 
 
 };
+
+void printMOTFormatTrackingLine(FILE * outfile, int frame, int id, Rect coordinates);
 
 
 #endif //PANORAMA2CUBEMAP_PANORAMATRACKING_H

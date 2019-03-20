@@ -15,8 +15,8 @@ class CleanCubeMap: public Projector{
 public:
     CleanCubeMap();
     int project(Mat const &input, Mat & output) override;
-    void project(Mat const & inpit, int projectionId, Mat & output);
-    Rect sourceCoordinates(Mat const & input, Rect const & coordinates, int projectionNumber);
+    void project(Mat const & inpit, int projectionId, Mat & output) override;
+    Rect sourceCoordinates(Mat const & input, Rect const & coordinates, int projectionNumber) override;
     int beginProjection() override;
 
 private:
@@ -88,7 +88,7 @@ class YOLOWrapper : public DetectorWrapper{
 public:
     YOLOWrapper() = default;
     std::vector<Rect> detect(Mat const &input) override;
-private:
+
     MatDetector matDetector;
 
 };
@@ -99,8 +99,6 @@ public:
     explicit AOIFileDetectorWrapper(const char * aoiFile);
     std::vector<Rect> detect(Mat const & input) override;
     DetectionFromFile detector;
-
-
 
 };
 

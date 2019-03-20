@@ -10,8 +10,20 @@
 #include <iostream>
 #include "cubetransform.h"
 
-/* See https://stackoverflow.com/questions/29678510/convert-21-equirectangular-panorama-to-cube-map  for how i got to this solution.
-*/
+
+/*
+ *  This file contains two possible Projections. The first one was used at the beginning of the Work, the second one is
+ *  implemented as described in the thesis.
+ *
+ */
+
+
+/* ---------------------------------------------------------------------------------------------------------------------
+ * First Implementation
+ * See https://stackoverflow.com/questions/29678510/convert-21-equirectangular-panorama-to-cube-map  for how i got to
+ * this solution.
+ * ---------------------------------------------------------------------------------------------------------------------
+ */
 
 
 
@@ -100,6 +112,12 @@ void mapRectangleToPanorama(Mat const & inFrame,  int faceId,  int width,  int h
 
 }
 
+
+/* ---------------------------------------------------------------------------------------------------------------------
+ * Second implementation,
+ * as described in the thesis.
+ * ---------------------------------------------------------------------------------------------------------------------
+ */
 
 /**
  *

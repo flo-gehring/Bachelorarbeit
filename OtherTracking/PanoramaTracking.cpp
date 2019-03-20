@@ -13,6 +13,7 @@ PanoramaTracking::PanoramaTracking(DetectorWrapper *detector, const char * track
     this->detectionUpdateIntervall = 30;
     this->frameCounter = 0;
     this->startTime = time(0);
+    this->trackingResult = nullptr;
 }
 
 void PanoramaTracking::trackVideo(const char *fileName, const char * videoFile) {
@@ -62,13 +63,20 @@ void PanoramaTracking::trackVideo(const char *fileName, const char * videoFile) 
         
         update();
 
+        int id;
+
         for(std::tuple<Rect, Ptr<Tracker>> const & r :panoramaAOI){
             const Rect & rect = std::get<0>(r);
             const Ptr<Tracker> & ptrTracker = std::get<1>(r);
 
-            std::string name =  objectIdentifier.find(ptrTracker)->second;
+            id = objectIdentifier.find(ptrTracker)->second;
+            std::string name =  std::to_string(id);
             rectangle(currentFrame, std::get<0>(r), Scalar(0,0,255), 2);
             cv::putText(currentFrame, name, Point(rect.x, rect.y - 10), FONT_HERSHEY_SIMPLEX, textSize , textColor, lineThickness);
+
+            printMOTFormatTrackingLine(trackingResult, frameCounter - 1, id,  std::get<0>(r));
+
+
         }
 
         double fps = (time(0) - startTime) / double(frameCounter);
@@ -147,13 +155,17 @@ bool PanoramaTracking::update() {
 
             createNewTracker(projection, newDetection, projectionId);
             Ptr<Tracker> newTracker = trackers.back();
-            std::string id = std::to_string(trackers.size());
+            int id = trackers.size();
 
             panoramaPostion = projector->sourceCoordinates(currentFrame, newPosition, projectionId);
 
             objectIdentifier[newTracker] = id;
             panoramaAOI.emplace_back(std::make_pair(Rect(panoramaPostion), newTracker));
         }
+
+
+
+
 
     }
     ++frameCounter;
@@ -196,5 +208,13 @@ void PanoramaTracking::createNewTracker(Mat const &projection, Rect const &coord
     trackers.emplace_back(newTracker);
     projectionIdMapping[projectionId].emplace_back(newTracker);
 
+}
+
+void printMOTFormatTrackingLine(FILE *outfile, int frame, int id, Rect coordinates) {
+
+    if(outfile){
+        fprintf(outfile, "%i, %i, %i, %i, %i, %i, 0, -1, -1, -1\n", frame, id, coordinates.x, coordinates.y, coordinates.width, coordinates.height);
+        fflush(outfile);
+    }
 
 }
