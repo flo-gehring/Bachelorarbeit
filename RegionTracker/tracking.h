@@ -46,14 +46,14 @@ class FootballPlayer;
 
 using namespace std;
 
-class RegionTracker{
+class PanoramaTracker{
 public:
 
     double assignmentThreshold;
     double minDistanceThreshold;
 
-    RegionTracker();
-    explicit RegionTracker(const char * aoiFilePath, const char * videoPath = nullptr);
+    PanoramaTracker();
+    explicit PanoramaTracker(const char * aoiFilePath, const char * videoPath = nullptr);
 
     void setAOIFile(const char * aoiFilePath);
     void enableVideoSave(const char * videoFilePath);
@@ -66,7 +66,7 @@ public:
     void printTrackingResults(const char * resultFilePath);
 
 
-    virtual ~RegionTracker();
+    virtual ~PanoramaTracker();
 
     Mat matCurrentFrame;
     Mat matLastFrame; // Add to support optical Flow stuff.

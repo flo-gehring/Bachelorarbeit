@@ -73,14 +73,14 @@ public:
     virtual std::vector<Rect> detect(Mat const & input) = 0;
 };
 
-class PanoramaTracking {
+class SOTPanoramaTracking {
 public:
 
 
 
     FILE * trackingResult;
 
-    PanoramaTracking(DetectorWrapper * detector, const char * tracker, Projector * projector);
+    SOTPanoramaTracking(DetectorWrapper * detector, const char * tracker, Projector * projector);
     DetectorWrapper * detector;
     const char * trackerType;
     Projector * projector;

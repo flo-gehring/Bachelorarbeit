@@ -4,7 +4,7 @@
 
 #include "PanoramaTracking.h"
 
-PanoramaTracking::PanoramaTracking(DetectorWrapper *detector, const char * tracker, Projector *projector) {
+SOTPanoramaTracking::SOTPanoramaTracking(DetectorWrapper *detector, const char * tracker, Projector *projector) {
 
     this->detector = detector;
     this->trackerType = tracker;
@@ -16,7 +16,7 @@ PanoramaTracking::PanoramaTracking(DetectorWrapper *detector, const char * track
     this->trackingResult = nullptr;
 }
 
-void PanoramaTracking::trackVideo(const char *fileName, const char * videoFile) {
+void SOTPanoramaTracking::trackVideo(const char *fileName, const char * videoFile) {
 
     Scalar textColor = Scalar(0,0,255); // Red
     double textSize = 1.5;
@@ -63,7 +63,9 @@ void PanoramaTracking::trackVideo(const char *fileName, const char * videoFile) 
         
         update();
 
+
         int id;
+        CV_32
 
         for(std::tuple<Rect, Ptr<Tracker>> const & r :panoramaAOI){
             const Rect & rect = std::get<0>(r);
@@ -100,7 +102,7 @@ void PanoramaTracking::trackVideo(const char *fileName, const char * videoFile) 
 
 }
 
-bool PanoramaTracking::update() {
+bool SOTPanoramaTracking::update() {
 
 
     bool updateDetection = (frameCounter % detectionUpdateIntervall) == 0;
@@ -173,7 +175,7 @@ bool PanoramaTracking::update() {
     return false;
 }
 
-void PanoramaTracking::createNewTracker(Mat const &projection, Rect const &coordinates, int projectionId) {
+void SOTPanoramaTracking::createNewTracker(Mat const &projection, Rect const &coordinates, int projectionId) {
     const char * name  = trackerType;
 
     Ptr<Tracker> newTracker;

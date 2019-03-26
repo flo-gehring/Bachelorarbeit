@@ -89,7 +89,7 @@ int main(int argc, char *argv[]) {
 
     FILE * outFile;
     std::string outFileName;
-    PanoramaTracking * pt;
+    SOTPanoramaTracking * pt;
     for(const char * name: TRACKER_NAMES){
         if(!name) break;
 
@@ -97,7 +97,7 @@ int main(int argc, char *argv[]) {
         outFileName = string(name) + "_video2";
         cout << outFileName << endl;
         outFile = fopen((outFileName + ".txt").c_str(), "w");
-        pt = new PanoramaTracking(&yw, name, projectors[2]);
+        pt = new SOTPanoramaTracking(&yw, name, projectors[2]);
         pt->trackingResult = outFile;
         pt->trackVideo(videonames[0].c_str(), (outFileName + ".mp4").c_str());
 
@@ -155,7 +155,7 @@ int main(int argc, char *argv[]) {
     YOLOWrapper yoloWrapper;
     CubeMapProjector cubeMapProjector;
 
-    PanoramaTracking panoramaTracking(&yoloWrapper, "Boosting", &sp);
+    SOTSOTPanoramaTracking panoramaTracking(&yoloWrapper, "Boosting", &sp);
 
     panoramaTracking.trackVideo("/home/flo/Videos/TS_10_5.mp4");
 
@@ -183,7 +183,7 @@ int main(int argc, char *argv[]) {
 
     return 0;
 
-    RegionTracker rt;
+    PanoramaTracker rt;
     rt.assignmentThreshold = 2.5;
     rt.minDistanceThreshold = 0.3;
     int i = 0;

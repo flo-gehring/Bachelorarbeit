@@ -38,7 +38,7 @@ using namespace cv;
 #define P2C_AOI_FROM_FILE
 
 
-class RegionTracker;
+class PanoramaTracker;
 
 class FootballPlayer {
 public:
@@ -106,7 +106,7 @@ public:
     Rect area;
     vector<Region *> metaOldRegions;
     vector<Region *> metaNewRegions;
-    int *  matchOldAndNewRegions(Mat frame, int * matching, int frameNum, RegionTracker * rt);
+    int *  matchOldAndNewRegions(Mat frame, int * matching, int frameNum, PanoramaTracker * rt);
 
 };
 

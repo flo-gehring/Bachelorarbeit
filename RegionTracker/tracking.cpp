@@ -14,7 +14,7 @@
  * Performs the first round of detection which differs slightly from the following.
  * Cleans up from eventual past detections.
  */
-int RegionTracker::initialize(Mat frame) {
+int PanoramaTracker::initialize(Mat frame) {
 
     // Clean up before tracking Players in a new video.
     for(FootballPlayer * fp: footballPlayers) {
@@ -73,7 +73,7 @@ int RegionTracker::initialize(Mat frame) {
 /*
  * Everytime you grab a new Frame from your Videostream, pass it to this Method and
  */
-bool RegionTracker::update(Mat frame) {
+bool PanoramaTracker::update(Mat frame) {
 
     matLastFrame = Mat(matCurrentFrame);
 
@@ -133,7 +133,7 @@ bool yAxisOverlap(Rect const & r1, Rect const & r2, int distanceThreshold){
  * Detection on them.
  * The coordinates of the detected Bounding Boxes are projected back onto the original frame.
  */
-vector<Rect> RegionTracker::detectOnFrame(Mat  & frame) {
+vector<Rect> PanoramaTracker::detectOnFrame(Mat  & frame) {
 
     const int numOfFaces = 4; // if 4 -> neither top or bottom face. 6 -> all faces.
 
@@ -246,7 +246,7 @@ vector<Rect> RegionTracker::detectOnFrame(Mat  & frame) {
 
 }
 
-void RegionTracker::drawOnFrame(Mat frame, vector<MetaRegion> const & metaRegions) {
+void PanoramaTracker::drawOnFrame(Mat frame, vector<MetaRegion> const & metaRegions) {
     for (Region & r: regionsNewFrame){
         string id;
         id = r.playerInRegion->identifier;
@@ -274,7 +274,7 @@ void RegionTracker::drawOnFrame(Mat frame, vector<MetaRegion> const & metaRegion
     }
 }
 
-void RegionTracker::trackVideo(const char *filename) {
+void PanoramaTracker::trackVideo(const char *filename) {
 
     VideoCapture video(filename);
     Mat frame, resizedFrame;
@@ -395,7 +395,7 @@ void RegionTracker::trackVideo(const char *filename) {
  * Tries to determine some "Meta Regions" by grouping all the Regions in physical proximity together.
  * If a region from the last frame has no new region at all nearby, they will be marked as out of sight.
  */
-vector<MetaRegion> RegionTracker::calcMetaRegions() {
+vector<MetaRegion> PanoramaTracker::calcMetaRegions() {
 
     vector<int> indicesUnhandledRegions(regionsNewFrame.size());
     std::iota(std::begin(indicesUnhandledRegions),std::end(indicesUnhandledRegions), 0);
@@ -475,7 +475,7 @@ vector<MetaRegion> RegionTracker::calcMetaRegions() {
  * Things taken into Consideration: Size, (Predicted-)Position, Colorscheme.
  * The bigger the value, the more the likelihood of them representing the same area.
  */
-double RegionTracker::calcWeightedSimiliarity(const Region  * oldRegion, const Region *newRegion, Rect area){
+double PanoramaTracker::calcWeightedSimiliarity(const Region  * oldRegion, const Region *newRegion, Rect area){
 
 
     bool overlap = (oldRegion->coordinates & newRegion->coordinates).area() != 0;
@@ -545,7 +545,7 @@ double RegionTracker::calcWeightedSimiliarity(const Region  * oldRegion, const R
 }
 
 #ifdef UNDEF
-double RegionTracker::calcWeightedSimiliarity2(const Region  * oldRegion, const Region *newRegion, Rect area){
+double PanoramaTracker::calcWeightedSimiliarity2(const Region  * oldRegion, const Region *newRegion, Rect area){
 
     double similarityColor;
 
@@ -604,7 +604,7 @@ double RegionTracker::calcWeightedSimiliarity2(const Region  * oldRegion, const 
  * If two matching Regions are found the correct FootballPlayer will be assigned and the old Region deleted from
  * outOfSightRegions if its needed.
  */
-void RegionTracker::assignRegions( MetaRegion & metaRegion) {
+void PanoramaTracker::assignRegions( MetaRegion & metaRegion) {
 
     // double assignmentThreshold = 1.0f;
     // double minDistanceThreshold = 0.0f;
@@ -799,7 +799,6 @@ void RegionTracker::assignRegions( MetaRegion & metaRegion) {
 
         }
 
-
     }
 
     // Players who were ambiguous should not be considered again
@@ -899,9 +898,6 @@ void RegionTracker::assignRegions( MetaRegion & metaRegion) {
                 cout << endl;
             }
     #endif
-
-
-
 }
 
 
@@ -919,7 +915,7 @@ void RegionTracker::assignRegions( MetaRegion & metaRegion) {
  *
  * If absolutely no old Region was found, a new FootBallPlayer will be created.
  */
-void RegionTracker::interpretMetaRegions(vector<MetaRegion> & mr) {
+void PanoramaTracker::interpretMetaRegions(vector<MetaRegion> & mr) {
 
     noMatchFound.clear();
 
@@ -1008,7 +1004,7 @@ void RegionTracker::interpretMetaRegions(vector<MetaRegion> & mr) {
 /*
  * If the given FootballPlayer is in outOfSight Regions, the corresponding Region will be deleted.
  */
-void RegionTracker::deleteFromOutOfSight(FootballPlayer * searchFor) {
+void PanoramaTracker::deleteFromOutOfSight(FootballPlayer * searchFor) {
     auto iterator = outOfSightRegions.begin();
     for(Region * r : outOfSightRegions){
         if(r->playerInRegion == searchFor){
@@ -1019,7 +1015,7 @@ void RegionTracker::deleteFromOutOfSight(FootballPlayer * searchFor) {
     }
 }
 
-void RegionTracker::addToOutOfSight(Region * regionPtr) {
+void PanoramaTracker::addToOutOfSight(Region * regionPtr) {
 
     for(Region * region: outOfSightRegions) {
         if (region->playerInRegion == regionPtr->playerInRegion) return;
@@ -1032,7 +1028,7 @@ void RegionTracker::addToOutOfSight(Region * regionPtr) {
     assert(outOfSightRegions.back()->coordinates.area() != 0);
 }
 
-FootballPlayer *RegionTracker::createNewFootballPlayer(Rect const & coordinates) {
+FootballPlayer *PanoramaTracker::createNewFootballPlayer(Rect const & coordinates) {
     ++objectCounter;
     FootballPlayer * fp = new FootballPlayer(coordinates, currentFrame, string(to_string(objectCounter)));
     this->footballPlayers.push_back(fp);
@@ -1045,7 +1041,7 @@ FootballPlayer *RegionTracker::createNewFootballPlayer(Rect const & coordinates)
  *      --------------------------
  */
 
-RegionTracker::~RegionTracker() {
+PanoramaTracker::~PanoramaTracker() {
     for(FootballPlayer * footballPlayer : footballPlayers){
         delete footballPlayer;
     }
@@ -1055,7 +1051,7 @@ RegionTracker::~RegionTracker() {
     }
 }
 
-RegionTracker::RegionTracker(const char *aoiFilePath, const char * videoPath) {
+PanoramaTracker::PanoramaTracker(const char *aoiFilePath, const char * videoPath) {
 
     if(! videoPath){ // -> videoPath is default value nullptr.
         saveVideo = false;
@@ -1071,7 +1067,7 @@ RegionTracker::RegionTracker(const char *aoiFilePath, const char * videoPath) {
     pBGSubtractor = createBackgroundSubtractorMOG2(); //MOG2 approach
 }
 
-RegionTracker::RegionTracker() {
+PanoramaTracker::PanoramaTracker() {
 
     saveVideo = false;
     roiData = fopen("roidata.txt", "w");
@@ -1091,7 +1087,7 @@ RegionTracker::RegionTracker() {
  *      --------------------------------------
  */
 
-void RegionTracker::setAOIFile(const char *aoiFilePath) {
+void PanoramaTracker::setAOIFile(const char *aoiFilePath) {
 
     if(roiData != nullptr){
         fclose(roiData);
@@ -1101,14 +1097,14 @@ void RegionTracker::setAOIFile(const char *aoiFilePath) {
 
 }
 
-void RegionTracker::enableVideoSave(const char *videoFilePath) {
+void PanoramaTracker::enableVideoSave(const char *videoFilePath) {
 
     saveVideo = true;
     strcpy(saveVideoPath, videoFilePath);
 
 }
 
-void RegionTracker::setupAnalysisOutFile(const char * filename){
+void PanoramaTracker::setupAnalysisOutFile(const char * filename){
 
     analysisData = true;
 
@@ -1120,7 +1116,7 @@ void RegionTracker::setupAnalysisOutFile(const char * filename){
 
 
 
-FootballPlayer *RegionTracker::createAmbiguousPlayer(Rect const & coordinates) {
+FootballPlayer *PanoramaTracker::createAmbiguousPlayer(Rect const & coordinates) {
     FootballPlayer * fp = new FootballPlayer(coordinates, currentFrame, string(to_string(-1)));
     this->footballPlayers.push_back(fp);
     fp->isAmbiguous = true;
@@ -1129,7 +1125,7 @@ FootballPlayer *RegionTracker::createAmbiguousPlayer(Rect const & coordinates) {
 }
 
 
-void RegionTracker::printInfo(vector<MetaRegion> const & metaRegions) {
+void PanoramaTracker::printInfo(vector<MetaRegion> const & metaRegions) {
 
     if(roiData) {
         FootballPlayer *fp;
@@ -1157,7 +1153,7 @@ void RegionTracker::printInfo(vector<MetaRegion> const & metaRegions) {
     }
 }
 
-void RegionTracker::printTrackingResults(const char * filePath) {
+void PanoramaTracker::printTrackingResults(const char * filePath) {
 
     FILE * outFile = fopen(filePath, "w");
 
@@ -1210,7 +1206,7 @@ void RegionTracker::printTrackingResults(const char * filePath) {
  *
  */
 
-void RegionTracker::calcOpticalFlow(Rect const &area) {
+void PanoramaTracker::calcOpticalFlow(Rect const &area) {
 #ifdef UNDEF
     Mat inputOld = matLastFrame(area);
     Mat inputNew = matCurrentFrame(area);
